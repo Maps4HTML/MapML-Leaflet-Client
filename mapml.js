@@ -22,7 +22,7 @@
  * Notice of any changes or modifications, through a copyright statement on the 
  * new code or document such as "This software or document includes material 
  * copied from or derived from [title and URI of the W3C document]. 
- * Copyright Â© [YEAR] W3CÂ® (MIT, ERCIM, Keio, Beihang)."
+ * Copyright © [YEAR] W3C® (MIT, ERCIM, Keio, Beihang)."
  * 
  * Disclaimers
  * 
@@ -39,7 +39,7 @@
  * Title to copyright in this work will at all times remain with copyright holders.
  */
 ;/*
- * Copyright Â© 2007 Dominic Mitchell
+ * Copyright © 2007 Dominic Mitchell
  * 
  * All rights reserved.
  * 
@@ -113,7 +113,7 @@ URI.prototype.toString = function () {
 
 // Introduce a new scope to define some private helper functions.
 (function () {
-    // RFC3986 Â§5.2.3 (Merge Paths)
+    // RFC3986 §5.2.3 (Merge Paths)
     function merge(base, rel_path) {
         var dirname = /^(.*)\//;
         if (base.authority && !base.path) {
@@ -150,7 +150,7 @@ URI.prototype.toString = function () {
         return newpath;
     }
 
-    // RFC3986 Â§5.2.2. Transform References;
+    // RFC3986 §5.2.2. Transform References;
     URI.prototype.resolve = function (base) {
         var target = new URI();
         if (this.scheme) {
@@ -166,7 +166,7 @@ URI.prototype.toString = function () {
                 target.query     = this.query;
             }        
             else {
-                // XXX Original spec says "if defined and empty"â€¦;
+                // XXX Original spec says "if defined and empty"…;
                 if (!this.path) {
                     target.path = base.path;
                     if (this.query) {
@@ -219,7 +219,7 @@ URI.prototype.toString = function () {
  * Notice of any changes or modifications, through a copyright statement on the 
  * new code or document such as "This software or document includes material 
  * copied from or derived from [title and URI of the W3C document]. 
- * Copyright Â© [YEAR] W3CÂ® (MIT, ERCIM, Keio, Beihang)."
+ * Copyright © [YEAR] W3C® (MIT, ERCIM, Keio, Beihang)."
  * 
  * Disclaimers
  * 
@@ -1518,7 +1518,6 @@ M.mapMlFeatures = function (mapml, options) {
 M.MapMLLayerControl = L.Control.Layers.extend({
     initialize: function (overlays, options) {
         L.setOptions(this, options);
-        this.options.collapsed = false;
         
         // the _layers array contains objects like {layer: layer, name: "name", overlay: true}
         // the array index is the id of the layer returned by L.stamp(layer) which I guess is a unique hash
