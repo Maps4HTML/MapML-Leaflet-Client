@@ -1048,6 +1048,7 @@ M.MapMLLayer = L.Layer.extend({
         var url =  this._calculateUrl();
         if (url) {
             this.href = url;
+            this.fire('loadstart');
             this._mapmlvectors.clearLayers();
             this._initEl();
             this._getMapML(url);
