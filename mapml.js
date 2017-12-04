@@ -303,30 +303,9 @@ window.M = M;
     ],
     origin: [-2.8567784109255E7, 3.2567784109255E7]
   });
-    M.BCTILE = new L.Proj.CRS('EPSG:3005',
-  '+proj=aea +lat_1=50 +lat_2=58.5 +lat_0=45 +lon_0=-126 +x_0=1000000 +y_0=0 +ellps=GRS80 +datum=NAD83 +units=m +no_defs ',
-  {
-    resolutions: [
-      9783.9400003175,
-      4891.969998835831,
-      2445.9849999470835,
-      1222.9925001058336,
-      611.4962500529168,
-      305.74812489416644,
-      152.8740625,
-      76.4370312632292,
-      38.2185156316146,
-      19.10925781316146,
-      9.554628905257811,
-      4.7773144526289055,
-      2.3886572265790367,
-      1.1943286131572264
-    ],
-    origin: [-1.32393E7, 1.98685E7]
-  });
     M.OSMTILE = L.CRS.EPSG3857;
     L.setOptions(M.OSMTILE,
-      {
+      { 
         origin: [-20037508.342787, 20037508.342787],
         resolutions: [
           156543.0339,
@@ -474,6 +453,63 @@ M.ImageOverlay = L.ImageOverlay.extend({
 M.imageOverlay = function (url, location, size, angle, container, options) {
         return new M.ImageOverlay(url, location, size, angle, container, options);
 };
+M.TemplatedTileLayerGroup = L.Layer.extend({
+  
+  initialize: function(templates, options) {
+    this._templates =  templates;
+    L.setOptions(this, options);
+    this._container = L.DomUtil.create('div', 'leaflet-layer');
+
+    for (var i=0;i<templates.length;i++) {
+      this._templates[i].layer = M.templatedTileLayer(templates[i].template, L.Util.extend(templates[i],
+      // get a better/local url 
+      {group: this._container, errorTileUrl: "https://geoappext.nrcan.gc.ca/arcgis/rest/services/BaseMaps/CBMT3978/MapServer/tile/0/3/4?m4h=t"}));
+    }
+  },
+  onAdd: function (map) {
+    Polymer.dom(this.getPane()).appendChild(this._container);
+    for (var i=0;i<this._templates.length;i++) {
+      map.addLayer(this._templates[i].layer);
+    }
+  },
+  onRemove: function (map) {
+    L.DomUtil.remove(this._container);
+    for (var i=0;i<this._templates.length;i++) {
+      map.removeLayer(this._templates[i].layer);
+    }
+  }
+  
+});
+M.templatedTileLayerGroup = function(templates, options) {
+  // templates is an array of template objects
+  // a template object contains template,row,col,zoom members, plus optional 
+  // members representing template variables + values that are discovered and required by the server
+  // e.g. a key value
+  return new M.TemplatedTileLayerGroup(templates, options);
+};
+// a TemplateTileLayer is similar to a L.TileLayer except its templates are
+// defined by the <extent><template></template><template></template></extent>
+// content found in the MapML document.  As such, the client map does not
+// 'revisit' the server for more MapML content, it simply fills the map extent
+// with tiles for which it generates requests on demand (as the user pans/zooms/resizes
+// the map)
+M.TemplatedTileLayer = L.TileLayer.extend({
+  getPane: function() {
+    return this.options.group;
+  },
+  getTileUrl: function (coords) {
+      var obj = {};
+      obj[this.options.col] = coords.x;
+      obj[this.options.row] = coords.y;
+      obj[this.options.zoom] = this._getZoomForUrl();
+      obj.r = this.options.detectRetina && L.Browser.retina && this.options.maxZoom > 0 ? '@2x' : '';
+      obj.s = this._getSubdomain(coords);
+      return L.Util.template(this._url, obj);
+  }
+});
+M.templatedTileLayer = function(url,options) {
+  return new M.TemplatedTileLayer(url,options);
+};
 M.MapMLLayer = L.Layer.extend({
     // zIndex has to be set, for the case where the layer is added to the
     // map before the layercontrol is used to control it (where autoZindex is used)
@@ -550,8 +586,18 @@ M.MapMLLayer = L.Layer.extend({
         /* TODO establish the minZoom, maxZoom for the _tileLayer based on
          * info received from mapml server. */
         if (this._extent) {
+            if (this._templateVars) {
+              this._templatedLayer = M.templatedTileLayerGroup(this._templateVars, this._tileLayer._container);
+              map.addLayer(this._templatedLayer);
+            }
             this._onMoveEnd();
         } else {
+            this.once('extentload', function() {
+                if (this._templateVars) {
+                  this._templatedLayer = M.templatedTileLayerGroup(this._templateVars, this._tileLayer._container);
+                  map.addLayer(this._templatedLayer);
+                }
+              }, this);
             // if we get to this point and there is no this._extent, it means
             // we're waiting for the server to return one -> get content when
             // that is available.
@@ -573,6 +619,9 @@ M.MapMLLayer = L.Layer.extend({
         map.removeLayer(this._mapmlvectors);
         map.removeLayer(this._tileLayer);
         map.removeLayer(this._imageLayer);
+        if (this._templatedLayer) {
+            map.removeLayer(this._templatedLayer);
+        }
     },
     getZoomBounds: function () {
         if (!this._extent) return;
@@ -702,9 +751,41 @@ M.MapMLLayer = L.Layer.extend({
                     if (mapml.querySelector('feature,image,tile')) {
                         layer._content = mapml;
                     }
+                } else if (!serverExtent.hasAttribute("action") && serverExtent.querySelector('template') 
+                        && serverExtent.hasAttribute("units") && serverExtent.getAttribute("units") !== "WGS84") {
+                  layer._templateVars = [];
+                  // set up the URL template and associated variables
+                  var tlist = serverExtent.querySelectorAll('template'),
+                      rowVar = serverExtent.querySelector('input[type=location][units=tile][axis=row]').getAttribute("name"),
+                      colVar = serverExtent.querySelector('input[type=location][units=tile][axis=column]').getAttribute("name"),
+                      zoomVar = serverExtent.querySelector('input[type=zoom]').getAttribute("name");
+// not sure what to do with the bounds information; its the map that controls the bounce/limits/repeated copies of tiles              
+//                      xmin = serverExtent.querySelector('input[type=xmin]'),
+//                      xmax = serverExtent.querySelector('input[type=xmax]'),
+//                      ymin = serverExtent.querySelector('input[type=ymin]'),
+//                      ymax = serverExtent.querySelector('input[type=ymax]');
+//                  if (xmin && xmax && ymin && ymax) {
+//                    xmin = parseFloat(xmin.getAttribute("min"));
+//                    xmax = parseFloat(xmax.getAttribute("max"));
+//                    ymin = parseFloat(ymin.getAttribute("min"));
+//                    ymax = parseFloat(ymax.getAttribute("max"));
+//                    var zoom = parseInt(serverExtent.querySelector('input[type=zoom]').getAttribute("value")),
+//                        proj = serverExtent.getAttribute("units"),
+//                        ll = M[proj].pointToLatLng(L.point([xmin,ymax]),zoom),
+//                        ur = M[proj].pointToLatLng(L.point([xmax,ymin]),zoom),
+//                        b = L.latLngBounds(ll, ur);
+//                  }
+                  for (var i=0;i< tlist.length;i++) {
+                    var t = tlist[i];
+                    var tileTemplate = t.getAttribute('tref');
+                    if (tileTemplate && rowVar && colVar && zoomVar) {
+                      layer._templateVars.push({template:tileTemplate,row:rowVar,col:colVar,zoom:zoomVar});
+                    }
+                  }
                 }
                 layer._parseLicenseAndLegend(mapml, layer);
                 layer._extent = serverExtent;
+                layer._title = mapml.querySelector('title').textContent;
                 // BUG https://github.com/Maps4HTML/Web-Map-Custom-Element/issues/29
                 //layer._el.appendChild(document.importNode(serverExtent,true));
                 if (layer._map) {
