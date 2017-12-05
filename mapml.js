@@ -471,6 +471,18 @@ M.TemplatedTileLayerGroup = L.Layer.extend({
     for (var i=0;i<this._templates.length;i++) {
       map.addLayer(this._templates[i].layer);
     }
+    this.setZIndex(this.options.zIndex);
+  },
+  setZIndex: function (zIndex) {
+      this.options.zIndex = zIndex;
+      this._updateZIndex();
+
+      return this;
+  },
+  _updateZIndex: function () {
+      if (this._container && this.options.zIndex !== undefined && this.options.zIndex !== null) {
+          this._container.style.zIndex = this.options.zIndex;
+      }
   },
   onRemove: function (map) {
     L.DomUtil.remove(this._container);
@@ -478,7 +490,6 @@ M.TemplatedTileLayerGroup = L.Layer.extend({
       map.removeLayer(this._templates[i].layer);
     }
   }
-  
 });
 M.templatedTileLayerGroup = function(templates, options) {
   // templates is an array of template objects
@@ -494,6 +505,9 @@ M.templatedTileLayerGroup = function(templates, options) {
 // with tiles for which it generates requests on demand (as the user pans/zooms/resizes
 // the map)
 M.TemplatedTileLayer = L.TileLayer.extend({
+  // instead of being child of a pane, the TemplatedTileLayers are 'owned' by the group,
+  // and so are DOM children of the group, not the pane element (the MapMLLayer is
+  // a child of the overlay pane and always has a set of sub-layers)
   getPane: function() {
     return this.options.group;
   },
@@ -587,14 +601,14 @@ M.MapMLLayer = L.Layer.extend({
          * info received from mapml server. */
         if (this._extent) {
             if (this._templateVars) {
-              this._templatedLayer = M.templatedTileLayerGroup(this._templateVars, this._tileLayer._container);
+              this._templatedLayer = M.templatedTileLayerGroup(this._templateVars, this.options);
               map.addLayer(this._templatedLayer);
             }
             this._onMoveEnd();
         } else {
             this.once('extentload', function() {
                 if (this._templateVars) {
-                  this._templatedLayer = M.templatedTileLayerGroup(this._templateVars, this._tileLayer._container);
+                  this._templatedLayer = M.templatedTileLayerGroup(this._templateVars, this.options);
                   map.addLayer(this._templatedLayer);
                 }
               }, this);
@@ -682,22 +696,6 @@ M.MapMLLayer = L.Layer.extend({
     },
     getAttribution: function () {
         return this.options.attribution;
-    },
-    // setZIndex and _updateZIndex are copied directly from Leaflet's GridLayer,
-    // as we want to automatically control z-index behaviour for a MapMLLayer,
-    // and need to provide methods where required by Leaflet code i.e. where internal
-    // methods to L.Control.Layers are invoked but not overridden (by M.MapMLLayerControl)
-    // are invoked by Leaflet ancestor methods. Whew.
-    setZIndex: function (zIndex) {
-        this.options.zIndex = zIndex;
-        this._updateZIndex();
-
-        return this;
-    },
-    _updateZIndex: function () {
-        if (this._container && this.options.zIndex !== undefined && this.options.zIndex !== null) {
-            this._container.style.zIndex = this.options.zIndex;
-        }
     },
     _initExtent: function(content) {
         if (!this._href && !content) {return;}
