@@ -256,6 +256,34 @@ M.ImageOverlay = L.ImageOverlay.extend({
 M.imageOverlay = function (url, location, size, angle, container, options) {
         return new M.ImageOverlay(url, location, size, angle, container, options);
 };
+M.TemplatedImageLayer =  L.Layer.extend({
+    initialize: function(template, container, options) {
+        this._template = template;
+        this._container = container;
+        L.setOptions(this, options);
+        // todo
+    },
+    getEvents: function () {
+        var events = {
+            viewreset: this._resetAll,
+            zoom: this._resetView,
+            moveend: this._onMoveEnd
+        };
+        return events;
+    },
+    onAdd: function () {
+      // todo
+    },
+    _onMoveEnd: function() {
+      // todo
+    },
+    onRemove: function () {
+      // todo
+    }
+});
+M.templatedImageLayer = function(template, container, options) {
+    return new M.TemplatedImageLayer(template, container, options);
+}
 M.TemplatedLayer = L.Layer.extend({
   
   initialize: function(templates, options) {
@@ -268,7 +296,7 @@ M.TemplatedLayer = L.Layer.extend({
           this._templates[i].layer = M.templatedTileLayer(templates[i], 
             L.Util.extend(this.options, {group: this._container, errorTileUrl: "blank.jpg"}));
       } else {
-        // create a templated image layer
+          this._templates[i].layer = M.templatedImageLayer(templates[i], container, this.options);
       }
     }
   },
@@ -548,15 +576,13 @@ M.MapMLLayer = L.Layer.extend({
          * info received from mapml server. */
         if (this._extent) {
             if (this._templateVars) {
-              this._templatedLayer = M.templatedLayer(this._templateVars, this.options);
-              map.addLayer(this._templatedLayer);
+              this._templatedLayer = M.templatedLayer(this._templateVars, this.options).addTo(map);
             }
             this._onMoveEnd();
         } else {
             this.once('extentload', function() {
                 if (this._templateVars) {
-                  this._templatedLayer = M.templatedLayer(this._templateVars, this.options);
-                  map.addLayer(this._templatedLayer);
+                  this._templatedLayer = M.templatedLayer(this._templateVars, this.options).addTo(map);
                 }
               }, this);
             // if we get to this point and there is no this._extent, it means
@@ -793,9 +819,6 @@ M.MapMLLayer = L.Layer.extend({
                     serverExtent = layer._synthesizeExtent(mapml);
                 }
                   layer._extent = serverExtent;
-                  // the serverExtent should be removed if necessary from layer._el before by _initEl
-                  // BUG https://github.com/Maps4HTML/Web-Map-Custom-Element/issues/29
-                  //layer._el.appendChild(document.importNode(serverExtent,true));
                   layer._parseLicenseAndLegend(mapml, layer);
               }
               if (mapml.querySelector('feature')) {
