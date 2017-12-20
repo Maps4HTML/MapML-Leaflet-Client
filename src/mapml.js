@@ -257,33 +257,123 @@ M.imageOverlay = function (url, location, size, angle, container, options) {
         return new M.ImageOverlay(url, location, size, angle, container, options);
 };
 M.TemplatedImageLayer =  L.Layer.extend({
-    initialize: function(template, container, options) {
+    initialize: function(template, parent, options) {
         this._template = template;
-        this._container = container;
-        L.setOptions(this, options);
-        // todo
+        this._parent = parent;
+        this._container = L.DomUtil.create('div', 'leaflet-layer', this._parent);
+        L.setOptions(this, L.extend(options,this._setUpExtentTemplateVars(template)));
     },
     getEvents: function () {
         var events = {
-            viewreset: this._resetAll,
-            zoom: this._resetView,
             moveend: this._onMoveEnd
         };
         return events;
     },
     onAdd: function () {
-      // todo
+        this.setZIndex(this.options.zIndex);
+        this._onMoveEnd();
     },
     _onMoveEnd: function() {
-      // todo
+      
+      var map = this._map,
+        loc = map.getPixelBounds().min.subtract(map.getPixelOrigin()),
+        size = map.getSize(),
+        src = this.getImageUrl(),
+        overlayToRemove = this._imageOverlay;
+        this._imageOverlay = M.imageOverlay(src,loc,size,0,this._container);
+          
+      if (overlayToRemove) {
+        this._imageOverlay.on('load', function () {map.removeLayer(overlayToRemove);});
+      }
+      this._imageOverlay.addTo(map);
+    },
+    setZIndex: function (zIndex) {
+        this.options.zIndex = zIndex;
+        this._updateZIndex();
+
+        return this;
+    },
+    _updateZIndex: function () {
+        if (this._container && this.options.zIndex !== undefined && this.options.zIndex !== null) {
+            this._container.style.zIndex = this.options.zIndex;
+        }
     },
     onRemove: function () {
-      // todo
+    },
+    getImageUrl: function() {
+        var obj = {};
+        obj[this.options.extent.width] = this._map.getSize().x;
+        obj[this.options.extent.height] = this._map.getSize().y;
+        obj[this.options.extent.bottom] = this._TCRSToPCRS(this._map.getPixelBounds().max,this._map.getZoom()).y;
+        obj[this.options.extent.left] = this._TCRSToPCRS(this._map.getPixelBounds().min, this._map.getZoom()).x;
+        obj[this.options.extent.top] = this._TCRSToPCRS(this._map.getPixelBounds().min, this._map.getZoom()).y;
+        obj[this.options.extent.right] = this._TCRSToPCRS(this._map.getPixelBounds().max,this._map.getZoom()).x;
+        return L.Util.template(this._template.template, obj);
+    },
+    _TCRSToPCRS: function(coords, zoom) {
+      // TCRS pixel point to Projected CRS point (in meters, presumably)
+      var map = this._map,
+          crs = map.options.crs,
+          loc = crs.transformation.untransform(coords,crs.scale(zoom));
+          return loc;
+    },
+    _setUpExtentTemplateVars: function(template) {
+      // process the inputs associated to template and create an object named
+      // extent with member properties as follows:
+      // {width: 'widthvarname', 
+      //  height: 'heightvarname', 
+      //  left: 'leftvarname', 
+      //  right: 'rightvarname', 
+      //  top: 'topvarname', 
+      //  bottom: 'bottomvarname'}
+
+      var extentVarNames = {extent:{}},
+          inputs = template.values;
+      
+      for (var i=0;i<template.values.length;i++) {
+        var type = inputs[i].getAttribute("type"), 
+            units = inputs[i].getAttribute("units"), 
+            axis = inputs[i].getAttribute("axis"), 
+            name = inputs[i].getAttribute("name"), 
+            position = inputs[i].getAttribute("position"),
+            value = inputs[i].getAttribute("value");
+        if (type === "width") {
+              extentVarNames.extent.width = name;
+        } else if ( type === "height") {
+              extentVarNames.extent.height = name;
+        } else if (type === "location" && units === "pcrs") {
+          //<input name="..." units="pcrs" type="location" position="top|bottom-left|right" axis="northing|easting"/>
+          switch (axis) {
+            case ('easting'):
+              if (position) {
+                  if (position.match(/.*?-left/i)) {
+                    extentVarNames.extent.left = name;
+                  } else if (position.match(/.*?-right/i)) {
+                    extentVarNames.extent.right = name;
+                  }
+              }
+              break;
+            case ('northing'):
+              if (position) {
+                if (position.match(/top-.*?/i)) {
+                  extentVarNames.extent.top = name;
+                } else if (position.match(/bottom-.*?/i)) {
+                  extentVarNames.extent.bottom = name;
+                }
+              }
+              break;
+          }
+        } else if (type === "hidden") {
+           extentVarNames.extent[name] = value;
+           // <input name="foo" type="hidden" value="bar"/>
+        }
+      }
+      return extentVarNames;
     }
 });
-M.templatedImageLayer = function(template, container, options) {
-    return new M.TemplatedImageLayer(template, container, options);
-}
+M.templatedImageLayer = function(template, parent, options) {
+    return new M.TemplatedImageLayer(template, parent, options);
+};
 M.TemplatedLayer = L.Layer.extend({
   
   initialize: function(templates, options) {
@@ -294,9 +384,9 @@ M.TemplatedLayer = L.Layer.extend({
     for (var i=0;i<templates.length;i++) {
       if (templates[i].type === 'tile') {
           this._templates[i].layer = M.templatedTileLayer(templates[i], 
-            L.Util.extend(this.options, {group: this._container, errorTileUrl: "blank.jpg"}));
+            L.Util.extend(this.options, {group: this._container, errorTileUrl: "data:image/gif;base64,R0lGODlhAQABAAAAACw=", zIndex: i}));
       } else {
-          this._templates[i].layer = M.templatedImageLayer(templates[i], container, this.options);
+          this._templates[i].layer = M.templatedImageLayer(templates[i], this._container, L.Util.extend(this.options, {zIndex: i}));
       }
     }
   },
@@ -361,10 +451,9 @@ M.TemplatedTileLayer = L.TileLayer.extend({
         obj[this.options.tile.top] = this._tileMatrixToPCRSPosition(coords, 'top-left').y;
         obj[this.options.tile.bottom] = this._tileMatrixToPCRSPosition(coords, 'bottom-left').y;
         for (var v in this.options.tile) {
-          var vn = `${v}`;
-          if (vn !== "row" && vn !== "col" && vn !== "zoom" && vn !== "left" && vn !== "right" && vn !== "top" && vn !== "bottom") {
-            obj[v] = this.options.tile[v];
-          }
+            if (v !== "row" && v !== "col" && v !== "zoom" && v !== "left" && v !== "right" && v !== "top" && v !== "bottom") {
+              obj[v] = this.options.tile[v];
+            }
         }
         obj.r = this.options.detectRetina && L.Browser.retina && this.options.maxZoom > 0 ? '@2x' : '';
         obj.s = this._getSubdomain(coords);  // this is hard-coded, should add an input@type for this?
@@ -624,7 +713,8 @@ M.MapMLLayer = L.Layer.extend({
         
         if (!this._extent) return;
         var zoom = map.getZoom(), projection = map.options.projection,
-            projecting = (projection !== this._extent.querySelector('[type=projection]').getAttribute('value')),
+            ep = this._extent.querySelector('[type=projection]') ? this._extent.querySelector('[type=projection]').getAttribute('value') : this._extent.getAttribute("units"),
+            projecting = (projection !== ep),
             p;
         
         var xmin,ymin,xmax,ymax,v1,v2,extentZoomValue;
