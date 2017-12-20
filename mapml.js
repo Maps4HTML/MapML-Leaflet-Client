@@ -303,30 +303,9 @@ window.M = M;
     ],
     origin: [-2.8567784109255E7, 3.2567784109255E7]
   });
-    M.BCTILE = new L.Proj.CRS('EPSG:3005',
-  '+proj=aea +lat_1=50 +lat_2=58.5 +lat_0=45 +lon_0=-126 +x_0=1000000 +y_0=0 +ellps=GRS80 +datum=NAD83 +units=m +no_defs ',
-  {
-    resolutions: [
-      9783.9400003175,
-      4891.969998835831,
-      2445.9849999470835,
-      1222.9925001058336,
-      611.4962500529168,
-      305.74812489416644,
-      152.8740625,
-      76.4370312632292,
-      38.2185156316146,
-      19.10925781316146,
-      9.554628905257811,
-      4.7773144526289055,
-      2.3886572265790367,
-      1.1943286131572264
-    ],
-    origin: [-1.32393E7, 1.98685E7]
-  });
     M.OSMTILE = L.CRS.EPSG3857;
     L.setOptions(M.OSMTILE,
-      {
+      { 
         origin: [-20037508.342787, 20037508.342787],
         resolutions: [
           156543.0339,
@@ -474,6 +453,338 @@ M.ImageOverlay = L.ImageOverlay.extend({
 M.imageOverlay = function (url, location, size, angle, container, options) {
         return new M.ImageOverlay(url, location, size, angle, container, options);
 };
+M.TemplatedImageLayer =  L.Layer.extend({
+    initialize: function(template, parent, options) {
+        this._template = template;
+        this._parent = parent;
+        this._container = L.DomUtil.create('div', 'leaflet-layer', this._parent);
+        L.setOptions(this, L.extend(options,this._setUpExtentTemplateVars(template)));
+    },
+    getEvents: function () {
+        var events = {
+            moveend: this._onMoveEnd
+        };
+        return events;
+    },
+    onAdd: function () {
+        this.setZIndex(this.options.zIndex);
+        this._onMoveEnd();
+    },
+    _onMoveEnd: function() {
+      
+      var map = this._map,
+        loc = map.getPixelBounds().min.subtract(map.getPixelOrigin()),
+        size = map.getSize(),
+        src = this.getImageUrl(),
+        overlayToRemove = this._imageOverlay;
+        this._imageOverlay = M.imageOverlay(src,loc,size,0,this._container);
+          
+      if (overlayToRemove) {
+        this._imageOverlay.on('load', function () {map.removeLayer(overlayToRemove);});
+      }
+      this._imageOverlay.addTo(map);
+    },
+    setZIndex: function (zIndex) {
+        this.options.zIndex = zIndex;
+        this._updateZIndex();
+
+        return this;
+    },
+    _updateZIndex: function () {
+        if (this._container && this.options.zIndex !== undefined && this.options.zIndex !== null) {
+            this._container.style.zIndex = this.options.zIndex;
+        }
+    },
+    onRemove: function () {
+    },
+    getImageUrl: function() {
+        var obj = {};
+        obj[this.options.extent.width] = this._map.getSize().x;
+        obj[this.options.extent.height] = this._map.getSize().y;
+        obj[this.options.extent.bottom] = this._TCRSToPCRS(this._map.getPixelBounds().max,this._map.getZoom()).y;
+        obj[this.options.extent.left] = this._TCRSToPCRS(this._map.getPixelBounds().min, this._map.getZoom()).x;
+        obj[this.options.extent.top] = this._TCRSToPCRS(this._map.getPixelBounds().min, this._map.getZoom()).y;
+        obj[this.options.extent.right] = this._TCRSToPCRS(this._map.getPixelBounds().max,this._map.getZoom()).x;
+        return L.Util.template(this._template.template, obj);
+    },
+    _TCRSToPCRS: function(coords, zoom) {
+      // TCRS pixel point to Projected CRS point (in meters, presumably)
+      var map = this._map,
+          crs = map.options.crs,
+          loc = crs.transformation.untransform(coords,crs.scale(zoom));
+          return loc;
+    },
+    _setUpExtentTemplateVars: function(template) {
+      // process the inputs associated to template and create an object named
+      // extent with member properties as follows:
+      // {width: 'widthvarname', 
+      //  height: 'heightvarname', 
+      //  left: 'leftvarname', 
+      //  right: 'rightvarname', 
+      //  top: 'topvarname', 
+      //  bottom: 'bottomvarname'}
+
+      var extentVarNames = {extent:{}},
+          inputs = template.values;
+      
+      for (var i=0;i<template.values.length;i++) {
+        var type = inputs[i].getAttribute("type"), 
+            units = inputs[i].getAttribute("units"), 
+            axis = inputs[i].getAttribute("axis"), 
+            name = inputs[i].getAttribute("name"), 
+            position = inputs[i].getAttribute("position"),
+            value = inputs[i].getAttribute("value");
+        if (type === "width") {
+              extentVarNames.extent.width = name;
+        } else if ( type === "height") {
+              extentVarNames.extent.height = name;
+        } else if (type === "location" && units === "pcrs") {
+          //<input name="..." units="pcrs" type="location" position="top|bottom-left|right" axis="northing|easting"/>
+          switch (axis) {
+            case ('easting'):
+              if (position) {
+                  if (position.match(/.*?-left/i)) {
+                    extentVarNames.extent.left = name;
+                  } else if (position.match(/.*?-right/i)) {
+                    extentVarNames.extent.right = name;
+                  }
+              }
+              break;
+            case ('northing'):
+              if (position) {
+                if (position.match(/top-.*?/i)) {
+                  extentVarNames.extent.top = name;
+                } else if (position.match(/bottom-.*?/i)) {
+                  extentVarNames.extent.bottom = name;
+                }
+              }
+              break;
+          }
+        } else if (type === "hidden") {
+           extentVarNames.extent[name] = value;
+           // <input name="foo" type="hidden" value="bar"/>
+        }
+      }
+      return extentVarNames;
+    }
+});
+M.templatedImageLayer = function(template, parent, options) {
+    return new M.TemplatedImageLayer(template, parent, options);
+};
+M.TemplatedLayer = L.Layer.extend({
+  
+  initialize: function(templates, options) {
+    this._templates =  templates;
+    L.setOptions(this, options);
+    this._container = L.DomUtil.create('div', 'leaflet-layer');
+
+    for (var i=0;i<templates.length;i++) {
+      if (templates[i].type === 'tile') {
+          this._templates[i].layer = M.templatedTileLayer(templates[i], 
+            L.Util.extend(this.options, {group: this._container, errorTileUrl: "data:image/gif;base64,R0lGODlhAQABAAAAACw=", zIndex: i}));
+      } else {
+          this._templates[i].layer = M.templatedImageLayer(templates[i], this._container, L.Util.extend(this.options, {zIndex: i}));
+      }
+    }
+  },
+  onAdd: function (map) {
+    Polymer.dom(this.getPane()).appendChild(this._container);
+    for (var i=0;i<this._templates.length;i++) {
+      map.addLayer(this._templates[i].layer);
+    }
+    this.setZIndex(this.options.zIndex);
+  },
+  setZIndex: function (zIndex) {
+      this.options.zIndex = zIndex;
+      this._updateZIndex();
+
+      return this;
+  },
+  _updateZIndex: function () {
+      if (this._container && this.options.zIndex !== undefined && this.options.zIndex !== null) {
+          this._container.style.zIndex = this.options.zIndex;
+      }
+  },
+  onRemove: function (map) {
+    L.DomUtil.remove(this._container);
+    for (var i=0;i<this._templates.length;i++) {
+      map.removeLayer(this._templates[i].layer);
+    }
+  }
+});
+M.templatedLayer = function(templates, options) {
+  // templates is an array of template objects
+  // a template object contains the template, plus associated <input> elements
+  // which need to be processed just prior to creating a url from the template 
+  // with the values of the inputs
+  return new M.TemplatedLayer(templates, options);
+};
+// a TemplateTileLayer is similar to a L.TileLayer except its templates are
+// defined by the <extent><template/></extent>
+// content found in the MapML document.  As such, the client map does not
+// 'revisit' the server for more MapML content, it simply fills the map extent
+// with tiles for which it generates requests on demand (as the user pans/zooms/resizes
+// the map)
+M.TemplatedTileLayer = L.TileLayer.extend({
+    initialize: function(template, options) {
+      // call the parent constructor with the template tref value, per the 
+      // Leaflet tutorial: http://leafletjs.com/examples/extending/extending-1-classes.html#methods-of-the-parent-class
+      L.TileLayer.prototype.initialize.call(this, template.template, options);
+      L.setOptions(this, L.extend(options,this._setUpTileTemplateVars(template)));
+    },
+    // instead of being child of a pane, the TemplatedTileLayers are 'owned' by the group,
+    // and so are DOM children of the group, not the pane element (the MapMLLayer is
+    // a child of the overlay pane and always has a set of sub-layers)
+    getPane: function() {
+      return this.options.group;
+    },
+    getTileUrl: function (coords) {
+        var obj = {};
+        obj[this.options.tile.col] = coords.x;
+        obj[this.options.tile.row] = coords.y;
+        obj[this.options.tile.zoom] = this._getZoomForUrl();
+        obj[this.options.tile.left] = this._tileMatrixToPCRSPosition(coords, 'top-left').x;
+        obj[this.options.tile.right] = this._tileMatrixToPCRSPosition(coords, 'top-right').x;
+        obj[this.options.tile.top] = this._tileMatrixToPCRSPosition(coords, 'top-left').y;
+        obj[this.options.tile.bottom] = this._tileMatrixToPCRSPosition(coords, 'bottom-left').y;
+        for (var v in this.options.tile) {
+            if (v !== "row" && v !== "col" && v !== "zoom" && v !== "left" && v !== "right" && v !== "top" && v !== "bottom") {
+              obj[v] = this.options.tile[v];
+            }
+        }
+        obj.r = this.options.detectRetina && L.Browser.retina && this.options.maxZoom > 0 ? '@2x' : '';
+        obj.s = this._getSubdomain(coords);  // this is hard-coded, should add an input@type for this?
+        return L.Util.template(this._url, obj);
+    },
+    _tileMatrixToPCRSPosition: function (coords, pos) {
+// this is a tile:
+// 
+//   top-left         top-center           top-right
+//      +------------------+------------------+
+//      |                  |                  |
+//      |                  |                  |
+//      |                  |                  |
+//      |                  |                  |
+//      |                  |                  |
+//      |                  |                  |
+//      + center-left    center               + center-right
+//      |                  |                  |
+//      |                  |                  |
+//      |                  |                  |
+//      |                  |                  |
+//      |                  |                  |
+//      |                  |                  |
+//      |                  |                  |
+//      +------------------+------------------+
+//   bottom-left     bottom-center      bottom-right
+
+  var map = this._map,
+      crs = map.options.crs,
+      tileSize = this.getTileSize(),
+
+      nwPoint = coords.scaleBy(tileSize),
+      sePoint = nwPoint.add(tileSize),
+      centrePoint = nwPoint.add(Math.floor(tileSize / 2)),
+
+      nw = crs.transformation.untransform(nwPoint,crs.scale(coords.z)),
+      se = crs.transformation.untransform(sePoint,crs.scale(coords.z)),
+      cen = crs.transformation.untransform(centrePoint, crs.scale(coords.z)),
+      result = null;
+
+      switch (pos) {
+        case('top-left'):
+          result = nw;
+          break;
+        case('bottom-left'):
+          result = new L.Point(nw.x,se.y);
+          break;
+        case('center-left'):
+          result = new L.Point(nw.x,cen.y);
+          break;
+        case('top-right'):
+          result = new L.Point(se.x,nw.y);
+          break;
+        case('bottom-right'):
+          result = se;
+          break;
+        case('center-right'):
+          result = new L.Point(se.x,cen.y);
+          break;
+        case('top-center'):
+          result = new L.Point(cen.x,nw.y);
+          break;
+        case('bottom-center'):
+          result = new L.Point(cen.x,se.y);
+          break;
+        case('center'):
+          result = cen;
+          break;
+      }
+      return result;
+    },
+    _setUpTileTemplateVars: function(template) {
+      // process the inputs associated to template and create an object named
+      // tile with member properties as follows:
+      // {row: 'rowvarname', 
+      //  col: 'colvarname', 
+      //  left: 'leftvarname', 
+      //  right: 'rightvarname', 
+      //  top: 'topvarname', 
+      //  bottom: 'bottomvarname'}
+
+      var tileVarNames = {tile:{}},
+          inputs = template.values;
+      
+      for (var i=0;i<template.values.length;i++) {
+        var type = inputs[i].getAttribute("type"), 
+            units = inputs[i].getAttribute("units"), 
+            axis = inputs[i].getAttribute("axis"), 
+            name = inputs[i].getAttribute("name"), 
+            position = inputs[i].getAttribute("position"),
+            value = inputs[i].getAttribute("value");
+        if (type === "location" && units === "tilematrix") {
+          switch (axis) {
+            case("column"):
+              tileVarNames.tile.col = name;
+              break;
+            case("row"):
+              tileVarNames.tile.row = name;
+              break;
+            case("easting"):
+              if (position) {
+                if (position.match(/.*?-left/i)) {
+                  tileVarNames.tile.left = name;
+                } else if (position.match(/.*?-right/i)) {
+                  tileVarNames.tile.right = name;
+                }
+              } 
+              break;
+            case("northing"):
+              if (position) {
+                if (position.match(/top-.*?/i)) {
+                  tileVarNames.tile.top = name;
+                } else if (position.match(/bottom-.*?/i)) {
+                  tileVarNames.tile.bottom = name;
+                }
+              } 
+              break;
+            default:
+              // unsuportted axis value
+          }
+        } else if (type === "zoom") {
+          //<input name="..." type="zoom" value="0" min="0" max="17"/>
+           tileVarNames.tile.zoom = name;
+        } else if (type === "hidden") {
+           tileVarNames.tile[name] = value;
+           // <input name="foo" type="hidden" value="bar"/>
+        }
+      }
+      return tileVarNames;
+    }
+});
+M.templatedTileLayer = function(template, options) {
+  return new M.TemplatedTileLayer(template, options);
+};
 M.MapMLLayer = L.Layer.extend({
     // zIndex has to be set, for the case where the layer is added to the
     // map before the layercontrol is used to control it (where autoZindex is used)
@@ -550,8 +861,16 @@ M.MapMLLayer = L.Layer.extend({
         /* TODO establish the minZoom, maxZoom for the _tileLayer based on
          * info received from mapml server. */
         if (this._extent) {
+            if (this._templateVars) {
+              this._templatedLayer = M.templatedLayer(this._templateVars, this.options).addTo(map);
+            }
             this._onMoveEnd();
         } else {
+            this.once('extentload', function() {
+                if (this._templateVars) {
+                  this._templatedLayer = M.templatedLayer(this._templateVars, this.options).addTo(map);
+                }
+              }, this);
             // if we get to this point and there is no this._extent, it means
             // we're waiting for the server to return one -> get content when
             // that is available.
@@ -573,6 +892,9 @@ M.MapMLLayer = L.Layer.extend({
         map.removeLayer(this._mapmlvectors);
         map.removeLayer(this._tileLayer);
         map.removeLayer(this._imageLayer);
+        if (this._templatedLayer) {
+            map.removeLayer(this._templatedLayer);
+        }
     },
     getZoomBounds: function () {
         if (!this._extent) return;
@@ -588,7 +910,8 @@ M.MapMLLayer = L.Layer.extend({
         
         if (!this._extent) return;
         var zoom = map.getZoom(), projection = map.options.projection,
-            projecting = (projection !== this._extent.querySelector('[type=projection]').getAttribute('value')),
+            ep = this._extent.querySelector('[type=projection]') ? this._extent.querySelector('[type=projection]').getAttribute('value') : this._extent.getAttribute("units"),
+            projecting = (projection !== ep),
             p;
         
         var xmin,ymin,xmax,ymax,v1,v2,extentZoomValue;
@@ -633,22 +956,6 @@ M.MapMLLayer = L.Layer.extend({
     },
     getAttribution: function () {
         return this.options.attribution;
-    },
-    // setZIndex and _updateZIndex are copied directly from Leaflet's GridLayer,
-    // as we want to automatically control z-index behaviour for a MapMLLayer,
-    // and need to provide methods where required by Leaflet code i.e. where internal
-    // methods to L.Control.Layers are invoked but not overridden (by M.MapMLLayerControl)
-    // are invoked by Leaflet ancestor methods. Whew.
-    setZIndex: function (zIndex) {
-        this.options.zIndex = zIndex;
-        this._updateZIndex();
-
-        return this;
-    },
-    _updateZIndex: function () {
-        if (this._container && this.options.zIndex !== undefined && this.options.zIndex !== null) {
-            this._container.style.zIndex = this.options.zIndex;
-        }
     },
     _initExtent: function(content) {
         if (!this._href && !content) {return;}
@@ -702,9 +1009,37 @@ M.MapMLLayer = L.Layer.extend({
                     if (mapml.querySelector('feature,image,tile')) {
                         layer._content = mapml;
                     }
+                } else if (!serverExtent.hasAttribute("action") && serverExtent.querySelector('template') && serverExtent.hasAttribute("units") && serverExtent.getAttribute("units") !== "WGS84") {
+                  layer._templateVars = [];
+                  // set up the URL template and associated inputs (which yield variable values when processed)
+                  var tlist = serverExtent.querySelectorAll('template'),
+                      varNamesRe = (new RegExp('(?:\{)(.*?)(?:\})','g'));
+                  for (var i=0;i< tlist.length;i++) {
+                    var t = tlist[i],
+                        template = t.getAttribute('tref'), v,
+                        vcount=template.match(varNamesRe),
+                        ttype = (!t.hasAttribute('type') || t.getAttribute('type') === 'tile') ? 'tile' : 'image',
+                        inputs = [];
+                    while ((v = varNamesRe.exec(template)) !== null) {
+                      var varName = v[1],
+                      inp = serverExtent.querySelector('input[name='+varName+']');
+                      if (inp) {
+                        inputs.push(inp);
+                      } else {
+                        console.log('input with name='+varName+' not found for template variable of same name');
+                        // no match found, template won't be used
+                        break;
+                      }
+                    }
+                    if (template && vcount.length === inputs.length) {
+                      // template has a matching input for every variable reference {varref}
+                      layer._templateVars.push({template:template, type: ttype, values: inputs});
+                    }
+                  }
                 }
                 layer._parseLicenseAndLegend(mapml, layer);
                 layer._extent = serverExtent;
+                layer._title = mapml.querySelector('title').textContent;
                 // BUG https://github.com/Maps4HTML/Web-Map-Custom-Element/issues/29
                 //layer._el.appendChild(document.importNode(serverExtent,true));
                 if (layer._map) {
@@ -771,9 +1106,6 @@ M.MapMLLayer = L.Layer.extend({
                     serverExtent = layer._synthesizeExtent(mapml);
                 }
                   layer._extent = serverExtent;
-                  // the serverExtent should be removed if necessary from layer._el before by _initEl
-                  // BUG https://github.com/Maps4HTML/Web-Map-Custom-Element/issues/29
-                  //layer._el.appendChild(document.importNode(serverExtent,true));
                   layer._parseLicenseAndLegend(mapml, layer);
               }
               if (mapml.querySelector('feature')) {
