@@ -18,12 +18,15 @@
     <div id="osmtile-map" style="height: 300px;width: 40%;"></div>
     <script>
         addEventListener('WebComponentsReady', function() {
-                     cbmt =  M.mapMLLayer('tile-cache-OSMTILE.mapml'),
+                     cbmt =  M.mapMLLayer('tile-cache-OSMTILE.mapml',null,{zIndex:1}),
+                     osm =  M.mapMLLayer('tile-cache-OSMTILE-osm.mapml',null,{zIndex:2}),
+                     roads =  M.mapMLLayer('http://geogratis.gc.ca/api/beta/mapml/en/osmtile/roads/',null,{zIndex:3}),
+                     features = M.mapMLLayer('https://geogratis.gc.ca/api/beta/vectors/canvec/50k/features/',null,{zIndex:4}),
           cbmtMap =    L.map('osmtile-map',{
                   center: [45.398043,-75.70683],
                   projection: 'OSMTILE',
                   crs: M['OSMTILE'],
-                  zoom: 14,
+                  zoom: 15,
                   layers: [cbmt],
 //  so here's some experience in a comment:
 //  maxBounds on the _map_ prevents the map from panning outside that bounds (it bounces) 
@@ -40,7 +43,7 @@
 // See https://github.com/Maps4HTML/MapML-Leaflet-Client/issues/24 
                   fadeAnimation: true
                 }),
-          cbmtLayerControl = M.mapMlLayerControl({'Canada Base Map':cbmt},{"collapsed":true}).addTo(cbmtMap);
+          cbmtLayerControl = M.mapMlLayerControl({'Canada Base Map':cbmt,'Open Street Map': osm, 'Roads': roads, 'Features': features},{"collapsed":true}).addTo(cbmtMap);
           cbmtMap.attributionControl.setPrefix('<a href="https://www.w3.org/community/maps4html/" title="W3C Maps4HTML Community Group">MapML</a>');
 //          marker = L.marker([45.398043,-75.70683],{draggable:true}).addTo(cbmtMap);
         });

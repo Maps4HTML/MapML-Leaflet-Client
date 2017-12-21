@@ -376,22 +376,21 @@ M.templatedImageLayer = function(template, parent, options) {
 };
 M.TemplatedLayer = L.Layer.extend({
   
-  initialize: function(templates, options) {
+  initialize: function(templates, parent, options) {
     this._templates =  templates;
     L.setOptions(this, options);
-    this._container = L.DomUtil.create('div', 'leaflet-layer');
+    this._container = L.DomUtil.create('div', 'leaflet-layer', parent);
 
     for (var i=0;i<templates.length;i++) {
       if (templates[i].type === 'tile') {
-          this._templates[i].layer = M.templatedTileLayer(templates[i], 
-            L.Util.extend(this.options, {group: this._container, errorTileUrl: "data:image/gif;base64,R0lGODlhAQABAAAAACw=", zIndex: i}));
+          this._templates[i].layer = M.templatedTileLayer(templates[i], this._container,
+            L.Util.extend(this.options, {errorTileUrl: "data:image/gif;base64,R0lGODlhAQABAAAAACw=", zIndex: i}));
       } else {
           this._templates[i].layer = M.templatedImageLayer(templates[i], this._container, L.Util.extend(this.options, {zIndex: i}));
       }
     }
   },
   onAdd: function (map) {
-    Polymer.dom(this.getPane()).appendChild(this._container);
     for (var i=0;i<this._templates.length;i++) {
       map.addLayer(this._templates[i].layer);
     }
@@ -415,12 +414,12 @@ M.TemplatedLayer = L.Layer.extend({
     }
   }
 });
-M.templatedLayer = function(templates, options) {
+M.templatedLayer = function(templates, parent, options) {
   // templates is an array of template objects
   // a template object contains the template, plus associated <input> elements
   // which need to be processed just prior to creating a url from the template 
   // with the values of the inputs
-  return new M.TemplatedLayer(templates, options);
+  return new M.TemplatedLayer(templates, parent, options);
 };
 // a TemplateTileLayer is similar to a L.TileLayer except its templates are
 // defined by the <extent><template/></extent>
@@ -429,7 +428,8 @@ M.templatedLayer = function(templates, options) {
 // with tiles for which it generates requests on demand (as the user pans/zooms/resizes
 // the map)
 M.TemplatedTileLayer = L.TileLayer.extend({
-    initialize: function(template, options) {
+    initialize: function(template, parent, options) {
+      this._parent = parent;
       // call the parent constructor with the template tref value, per the 
       // Leaflet tutorial: http://leafletjs.com/examples/extending/extending-1-classes.html#methods-of-the-parent-class
       L.TileLayer.prototype.initialize.call(this, template.template, options);
@@ -439,7 +439,7 @@ M.TemplatedTileLayer = L.TileLayer.extend({
     // and so are DOM children of the group, not the pane element (the MapMLLayer is
     // a child of the overlay pane and always has a set of sub-layers)
     getPane: function() {
-      return this.options.group;
+      return this._parent;
     },
     getTileUrl: function (coords) {
         var obj = {};
@@ -585,8 +585,8 @@ M.TemplatedTileLayer = L.TileLayer.extend({
       return tileVarNames;
     }
 });
-M.templatedTileLayer = function(template, options) {
-  return new M.TemplatedTileLayer(template, options);
+M.templatedTileLayer = function(template, parent, options) {
+  return new M.TemplatedTileLayer(template, parent, options);
 };
 M.MapMLLayer = L.Layer.extend({
     // zIndex has to be set, for the case where the layer is added to the
@@ -608,6 +608,7 @@ M.MapMLLayer = L.Layer.extend({
         if (mapml) {
             this._content = content;
         }
+        this._container = L.DomUtil.create('div', 'leaflet-layer');
         this._el = L.DomUtil.create('div', 'mapml-layer');
         // hit the service to determine what its extent might be
         // OR use the extent of the content provided
@@ -621,10 +622,21 @@ M.MapMLLayer = L.Layer.extend({
         this.on('attached', this._validateExtent, this );
         L.setOptions(this, options);
     },
+    setZIndex: function (zIndex) {
+        this.options.zIndex = zIndex;
+        this._updateZIndex();
+
+        return this;
+    },
+    _updateZIndex: function () {
+        if (this._container && this.options.zIndex !== undefined && this.options.zIndex !== null) {
+            this._container.style.zIndex = this.options.zIndex;
+        }
+    },
     onAdd: function (map) {
         this._map = map;
         if (!this._mapmlvectors) {
-          this._mapmlvectors = M.mapMlFeatures(null,{
+          this._mapmlvectors = M.mapMlFeatures(null, this._container, {
               opacity: this.options.opacity,
               onEachFeature: function(feature, layer) {
                 var type;
@@ -643,7 +655,7 @@ M.MapMLLayer = L.Layer.extend({
                       popupContent += feature.childNodes[i].tagName+ " = " + feature.childNodes[i].textContent +"<br>";
                   }
                 }
-                layer.bindPopup(popupContent, {autoPan:true});
+                layer.bindPopup(popupContent, {autoPan:false});
               }
             });
         }
@@ -655,7 +667,7 @@ M.MapMLLayer = L.Layer.extend({
         map.addLayer(this._imageLayer);
         
         if (!this._tileLayer) {
-          this._tileLayer = M.mapMLTileLayer(this.href?this.href:this._href, this.options);
+          this._tileLayer = M.mapMLTileLayer(this.href?this.href:this._href, this._container, this.options);
         }
         this._tileLayer._el = this._el;
         map.addLayer(this._tileLayer);       
@@ -665,13 +677,13 @@ M.MapMLLayer = L.Layer.extend({
          * info received from mapml server. */
         if (this._extent) {
             if (this._templateVars) {
-              this._templatedLayer = M.templatedLayer(this._templateVars, this.options).addTo(map);
+              this._templatedLayer = M.templatedLayer(this._templateVars, this._container, this.options).addTo(map);
             }
             this._onMoveEnd();
         } else {
             this.once('extentload', function() {
                 if (this._templateVars) {
-                  this._templatedLayer = M.templatedLayer(this._templateVars, this.options).addTo(map);
+                  this._templatedLayer = M.templatedLayer(this._templateVars, this._container, this.options).addTo(map);
                 }
               }, this);
             // if we get to this point and there is no this._extent, it means
@@ -679,6 +691,8 @@ M.MapMLLayer = L.Layer.extend({
             // that is available.
             this.once('extentload', this._onMoveEnd, this);
         }
+        this.setZIndex(this.options.zIndex);
+        Polymer.dom(this.getPane()).appendChild(this._container);
     },
     addTo: function (map) {
         map.addLayer(this);
@@ -691,6 +705,7 @@ M.MapMLLayer = L.Layer.extend({
         };
     },
     onRemove: function (map) {
+        L.DomUtil.remove(this._container);      
         this._mapmlvectors.clearLayers();
         map.removeLayer(this._mapmlvectors);
         map.removeLayer(this._tileLayer);
@@ -1312,7 +1327,14 @@ M.mapMLLayer = function (url, node, options) {
 	return new M.MapMLLayer(url, node ? node : document.createElement('div'), options);
 };
 M.MapMLTileLayer = L.TileLayer.extend({
-        // override the function of the same name defined in L.GridLayer
+    initialize: function(url, parent, options) {
+        this._container = L.DomUtil.create('div','leaflet-layer', parent);
+        L.TileLayer.prototype.initialize.call(this, url, options);
+        L.setOptions(this, options);
+    },
+  onRemove: function() {
+      L.DomUtil.remove(this._container);    
+  },     
 	getEvents: function () {
 		var events = {};
                 // doing updates on move causes too much jank...
@@ -1568,8 +1590,8 @@ M.MapMLTileLayer = L.TileLayer.extend({
 	}
 });
 
-M.mapMLTileLayer = function (url, options) {
-	return new M.MapMLTileLayer(url, options);
+M.mapMLTileLayer = function (url, parent, options) {
+	return new M.MapMLTileLayer(url, parent, options);
 };
 M.MapMLTileLayer.addInitHook(function () {
     this.on('tileload', function (e) {
@@ -1583,7 +1605,9 @@ M.MapMLTileLayer.addInitHook(function () {
  */
 
 M.MapMLFeatures = L.FeatureGroup.extend({
-	initialize: function (mapml, options) {
+	initialize: function (mapml, parent, options) {
+    
+    this._container = L.DomUtil.create('div','leaflet-layer', parent);
 		L.setOptions(this, options);
 
 		this._layers = {};
@@ -1797,8 +1821,8 @@ L.extend(M.MapMLFeatures, {
 	}
 });
  
-M.mapMlFeatures = function (mapml, options) {
-	return new M.MapMLFeatures(mapml, options);
+M.mapMlFeatures = function (mapml, parent, options) {
+	return new M.MapMLFeatures(mapml, parent, options);
 };
 
 
