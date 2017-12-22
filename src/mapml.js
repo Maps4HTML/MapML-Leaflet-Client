@@ -944,7 +944,7 @@ M.MapMLLayer = L.Layer.extend({
                       imageOverlays = [],
                       // need a reference to the _imageLayer container element to pass to children
                       // so they can append the img element they create to it.
-                      container = layer._el.parentElement;
+                      container = layer._container;
                   for (i=0;i<images.length;i++) {
                       var image = images[i],
                           src = image.getAttribute('src'),
@@ -1328,10 +1328,21 @@ M.mapMLLayer = function (url, node, options) {
 };
 M.MapMLTileLayer = L.TileLayer.extend({
     initialize: function(url, parent, options) {
+        this._parent = parent;
         this._container = L.DomUtil.create('div','leaflet-layer', parent);
         L.TileLayer.prototype.initialize.call(this, url, options);
         L.setOptions(this, options);
     },
+	_initContainer: function () {
+		if (this._container) { return; }
+
+		this._container = L.DomUtil.create('div', 'leaflet-layer', this._parent);
+		this._updateZIndex();
+
+		if (this.options.opacity < 1) {
+			this._updateOpacity();
+		}
+	},
 	getEvents: function () {
 		var events = {};
                 // doing updates on move causes too much jank...
