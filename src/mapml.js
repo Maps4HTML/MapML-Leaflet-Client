@@ -383,10 +383,10 @@ M.TemplatedLayer = L.Layer.extend({
 
     for (var i=0;i<templates.length;i++) {
       if (templates[i].type === 'tile') {
-          this._templates[i].layer = M.templatedTileLayer(templates[i], this._container,
+          this._templates[i].layer = M.templatedTileLayer(templates[i], parent,
             L.Util.extend(this.options, {errorTileUrl: "data:image/gif;base64,R0lGODlhAQABAAAAACw=", zIndex: i}));
       } else {
-          this._templates[i].layer = M.templatedImageLayer(templates[i], this._container, L.Util.extend(this.options, {zIndex: i}));
+          this._templates[i].layer = M.templatedImageLayer(templates[i], parent, L.Util.extend(this.options, {zIndex: i}));
       }
     }
   },
@@ -1836,6 +1836,9 @@ M.mapMlFeatures = function (mapml, parent, options) {
 
 /* removes 'base' layers as a concept */
 M.MapMLLayerControl = L.Control.Layers.extend({
+    options: {
+      autoZIndex: false
+    },
     initialize: function (overlays, options) {
         L.setOptions(this, options);
         
