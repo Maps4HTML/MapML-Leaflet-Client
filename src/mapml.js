@@ -390,6 +390,28 @@ M.TemplatedLayer = L.Layer.extend({
       }
     }
   },
+  reset: function (templates) {
+    if (!templates) {return;}
+    var addToMap = this._templates[0].layer._map,
+        old_templates = this._templates;
+    this._templates = templates;
+    for (var i=0;i<templates.length;i++) {
+      if (templates[i].type === 'tile') {
+          this._templates[i].layer = M.templatedTileLayer(templates[i], this._container.parentNode,
+            L.Util.extend(this.options, {errorTileUrl: "data:image/gif;base64,R0lGODlhAQABAAAAACw=", zIndex: i}));
+      } else {
+          this._templates[i].layer = M.templatedImageLayer(templates[i], this._container.parentNode, L.Util.extend(this.options, {zIndex: i}));
+      }
+      if (addToMap) {
+        this._map.addLayer(this._templates[i].layer);
+      }
+    }
+    for (i=0;i<old_templates.length;i++) {
+      if (this._map.hasLayer(old_templates[i].layer)) {
+        this._map.removeLayer(old_templates[i].layer);
+      }
+    }
+  },
   onAdd: function (map) {
     for (var i=0;i<this._templates.length;i++) {
       map.addLayer(this._templates[i].layer);
@@ -612,6 +634,7 @@ M.MapMLLayer = L.Layer.extend({
         this._el = L.DomUtil.create('div', 'mapml-layer');
         // hit the service to determine what its extent might be
         // OR use the extent of the content provided
+        this._initCount = 0;
         this._initExtent(mapml ? content : null);
         
         // a default extent can't be correctly set without the map to provide
@@ -701,8 +724,19 @@ M.MapMLLayer = L.Layer.extend({
     getEvents: function () {
         return {
 //            zoom: this._reset, 
-            moveend: this._onMoveEnd
+            moveend: this._onMoveEnd,
+            zoomend: this._onZoomEnd
         };
+    },
+    _onZoomEnd: function() {
+      var mapZoom = this._map.getZoom(),
+          zoom = this._extent.querySelector("input[type=zoom]"),
+          min = parseInt(zoom.getAttribute("min")),
+          max = parseInt(zoom.getAttribute("max")),
+          canZoom = (mapZoom < min && this._extent.zoomout) || (mapZoom > max && this._extent.zoomin);
+      if (this._templatedLayer && canZoom ) {
+        this._initExtent();
+      }
     },
     onRemove: function (map) {
         L.DomUtil.remove(this._container);      
@@ -857,6 +891,20 @@ M.MapMLLayer = L.Layer.extend({
                 }
                 layer._parseLicenseAndLegend(mapml, layer);
                 layer._extent = serverExtent;
+                
+                var zoomin = mapml.querySelector('link[rel=zoomin]'),
+                    zoomout = mapml.querySelector('link[rel=zoomout]'),
+                    base = (new URI(mapml.querySelector('base') ? mapml.querySelector('base').getAttribute('href') : null || this.responseURL)).resolve(new URI(this.responseURL));
+                if (zoomin) {
+                    layer._extent.zoomin = new URI(zoomin.getAttribute('href')).resolve(base).toString();
+                }
+                if (zoomout) {
+                    layer._extent.zoomout = new URI(zoomout.getAttribute('href')).resolve(base).toString();
+                }
+                if (layer._templatedLayer) {
+                  layer._templatedLayer.reset(layer._templateVars);
+                }
+                
                 layer._title = mapml.querySelector('title').textContent;
                 // BUG https://github.com/Maps4HTML/Web-Map-Custom-Element/issues/29
                 //layer._el.appendChild(document.importNode(serverExtent,true));
@@ -868,6 +916,19 @@ M.MapMLLayer = L.Layer.extend({
                         layer._map.attributionControl.addAttribution(layer.getAttribution());
                     }
                     layer._map.fire('moveend', layer);
+                    var mapZoom = layer._map.getZoom(),
+                        zoom = layer._extent.querySelector("input[type=zoom]"),
+                        min = parseInt(zoom.getAttribute("min")),
+                        max = parseInt(zoom.getAttribute("max"));
+                    // check that the zoom of the map is in the range of the zoom of the service
+                    if (!layer._extent.hasAttribute('action') && !(min <= mapZoom && mapZoom <= max)){
+                      if (layer._extent.zoomin && mapZoom > max) {
+                        this._href = layer._extent.zoomin;
+                      } else if (layer._extent.zoomout && mapZoom < min) {
+                        this._href = layer._extent.zoomout;
+                      }
+                      layer._map.fire('zoomend', layer);
+                    }
                 }
             } else {
                 layer.error = true;
@@ -1231,14 +1292,14 @@ M.MapMLLayer = L.Layer.extend({
     // map is covered, not just a band defined by the projected map bounds.
     _getUnprojectedMapLatLngBounds: function(map) {
       
-          map = map||this._map; 
-          origin = map.getPixelOrigin();
-          bounds = map.getPixelBounds();
-          nw = map.unproject(origin);
-          sw = map.unproject(bounds.getBottomLeft());
-          ne = map.unproject(bounds.getTopRight());
+        map = map||this._map; 
+        var origin = map.getPixelOrigin(),
+          bounds = map.getPixelBounds(),
+          nw = map.unproject(origin),
+          sw = map.unproject(bounds.getBottomLeft()),
+          ne = map.unproject(bounds.getTopRight()),
           se = map.unproject(origin.add(map.getSize()));
-          return L.latLngBounds(sw,ne).extend(se).extend(nw);
+        return L.latLngBounds(sw,ne).extend(se).extend(nw);
     },
     _calculateUrl: function() {
         
@@ -1246,7 +1307,26 @@ M.MapMLLayer = L.Layer.extend({
         if (!this._el && !this._extent) return this._href;
         var extent = this._el.getElementsByTagName('extent')[0] || this._extent;
         if (!extent) return this._href;
-        var action = extent.getAttribute("action");
+        var action = extent.getAttribute("action"),
+                base = new URI(this._href);
+        // establish the range of zoom values for the extent
+        var zoom = extent.querySelectorAll("input[type=zoom]")[0];
+        if ( !zoom ) return null;
+        var min = parseInt(zoom.getAttribute("min")),
+            max = parseInt(zoom.getAttribute("max")),
+            values = {}, // the values object will contain the values for the URI template
+            mapZoom = this._map.getZoom();
+        // check that the zoom of the map is in the range of the zoom of the service
+        if ( min <= mapZoom && mapZoom <= max) {
+          values.zoom = mapZoom;
+        } else if (!action){
+          if (extent.zoomin && mapZoom > max) {
+            this._href = extent.zoomin;
+          } else if (extent.zoomout && mapZoom < min) {
+            this._href = extent.zoomout;
+          }
+        }
+        
         if (!action || action === "synthetic") return null;
         var b,
             projection = extent.querySelectorAll('input[type=projection]')[0],
@@ -1309,8 +1389,7 @@ M.MapMLLayer = L.Layer.extend({
         var projectionName = projection.getAttribute('name')?projection.getAttribute('name').trim():'projection';
         var projectionTemplate = projectionName + "={" + projectionName + "}";
         
-        var requestTemplate = bboxTemplate + "&" + zoomTemplate + "&" + projectionTemplate,
-            base = new URI(this._href);
+        var requestTemplate = bboxTemplate + "&" + zoomTemplate + "&" + projectionTemplate;
         action += ((action.search(/\?/g) === -1) ? "?" : "&") + requestTemplate;
         var rel = new URI(action).resolve(base).toString();
         return L.Util.template(rel, values);
