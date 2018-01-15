@@ -150,468 +150,6 @@ M.Util = {
   }
 };
 M.coordsToArray = M.Util.coordsToArray;
-
-M.ImageOverlay = L.ImageOverlay.extend({
-	initialize: function (url, location, size, angle, container, options) { // (String, Point, Point, Number, Element, Object)
-                this._container = container;
-		this._url = url;
-                // instead of calculating where the image goes, put it at 0,0
-		//this._location = L.point(location);
-                // the location for WMS requests will be the upper left hand
-                // corner of the map.  When the map is initialized, that is 0,0,
-                // but as the user pans, of course the
-		this._location = location;
-                this._size = L.point(size);
-                this._angle = angle;
-
-		L.setOptions(this, options);
-	},
-        getEvents: function() {
-		var events = {
-			viewreset: this._reset
-		};
-
-		if (this._zoomAnimated) {
-			events.zoomanim = this._animateZoom;
-		}
-
-		return events;
-        },
-	onAdd: function () {
-                this.on({ 
-                  load: this._onImageLoad
-                  });
-
-		if (!this._image) {
-                    this._initImage();
-		}
-
-		if (this.options.interactive) {
-			L.DomUtil.addClass(this._image, 'leaflet-interactive');
-			this.addInteractiveTarget(this._image);
-		}
-
-		Polymer.dom(this._container).appendChild(this._image);
-		this._reset();
-	},
-	onRemove: function () {
-		L.DomUtil.remove(this._image);
-		if (this.options.interactive) {
-			this.removeInteractiveTarget(this._image);
-		}
-	},
-        _onImageLoad: function () {
-            if (!this._image) { return; }
-            this._image.loaded =  +new Date();
-            this._updateOpacity();
-        },
-	_animateZoom: function (e) {
-		var scale = this._map.getZoomScale(e.zoom),
-		    translate = this._map.getPixelOrigin().add(this._location).multiplyBy(scale)
-		        .subtract(this._map._getNewPixelOrigin(e.center, e.zoom)).round();
-
-		if (L.Browser.any3d) {
-			L.DomUtil.setTransform(this._image, translate, scale);
-		} else {
-			L.DomUtil.setPosition(this._image, translate);
-		}
-	},
-        _reset: function () {
-		var image = this._image,
-		    location = this._location,
-                    size = this._size,
-                    angle = 0.0;
-
-                // TBD use the angle to establish the image rotation in CSS
-
-		L.DomUtil.setPosition(image, location);
-
-		image.style.width  = size.x + 'px';
-		image.style.height = size.y + 'px';
-        },
-	_updateOpacity: function () {
-		if (!this._map) { return; }
-
-		//L.DomUtil.setOpacity(this._image, this.options.opacity);
-
-		var now = +new Date(),
-		    nextFrame = false;
-
-                var image = this._image;
-
-                var fade = Math.min(1, (now - image.loaded) / 200);
-
-                L.DomUtil.setOpacity(image, fade);
-                if (fade < 1) {
-                        nextFrame = true;
-                } 
-		if (nextFrame) {
-			L.Util.cancelAnimFrame(this._fadeFrame);
-			this._fadeFrame = L.Util.requestAnimFrame(this._updateOpacity, this);
-		}
-                L.DomUtil.addClass(image, 'leaflet-image-loaded');
-	}
-        
-});
-M.imageOverlay = function (url, location, size, angle, container, options) {
-        return new M.ImageOverlay(url, location, size, angle, container, options);
-};
-M.TemplatedImageLayer =  L.Layer.extend({
-    initialize: function(template, parent, options) {
-        this._template = template;
-        this._parent = parent;
-        this._container = L.DomUtil.create('div', 'leaflet-layer', this._parent);
-        L.DomUtil.addClass(this._container, 'mapml-templatedimagelayer');
-        L.setOptions(this, L.extend(options,this._setUpExtentTemplateVars(template)));
-    },
-    getEvents: function () {
-        var events = {
-            moveend: this._onMoveEnd
-        };
-        return events;
-    },
-    onAdd: function () {
-        this.setZIndex(this.options.zIndex);
-        this._onMoveEnd();
-    },
-    _onMoveEnd: function() {
-      
-      var map = this._map,
-        loc = map.getPixelBounds().min.subtract(map.getPixelOrigin()),
-        size = map.getSize(),
-        src = this.getImageUrl(),
-        overlayToRemove = this._imageOverlay;
-        this._imageOverlay = M.imageOverlay(src,loc,size,0,this._container);
-          
-      if (overlayToRemove) {
-        this._imageOverlay.on('load', function () {map.removeLayer(overlayToRemove);});
-      }
-      this._imageOverlay.addTo(map);
-    },
-    setZIndex: function (zIndex) {
-        this.options.zIndex = zIndex;
-        this._updateZIndex();
-
-        return this;
-    },
-    _updateZIndex: function () {
-        if (this._container && this.options.zIndex !== undefined && this.options.zIndex !== null) {
-            this._container.style.zIndex = this.options.zIndex;
-        }
-    },
-    onRemove: function () {
-    },
-    getImageUrl: function() {
-        var obj = {};
-        obj[this.options.extent.width] = this._map.getSize().x;
-        obj[this.options.extent.height] = this._map.getSize().y;
-        obj[this.options.extent.bottom] = this._TCRSToPCRS(this._map.getPixelBounds().max,this._map.getZoom()).y;
-        obj[this.options.extent.left] = this._TCRSToPCRS(this._map.getPixelBounds().min, this._map.getZoom()).x;
-        obj[this.options.extent.top] = this._TCRSToPCRS(this._map.getPixelBounds().min, this._map.getZoom()).y;
-        obj[this.options.extent.right] = this._TCRSToPCRS(this._map.getPixelBounds().max,this._map.getZoom()).x;
-        return L.Util.template(this._template.template, obj);
-    },
-    _TCRSToPCRS: function(coords, zoom) {
-      // TCRS pixel point to Projected CRS point (in meters, presumably)
-      var map = this._map,
-          crs = map.options.crs,
-          loc = crs.transformation.untransform(coords,crs.scale(zoom));
-          return loc;
-    },
-    _setUpExtentTemplateVars: function(template) {
-      // process the inputs associated to template and create an object named
-      // extent with member properties as follows:
-      // {width: 'widthvarname', 
-      //  height: 'heightvarname', 
-      //  left: 'leftvarname', 
-      //  right: 'rightvarname', 
-      //  top: 'topvarname', 
-      //  bottom: 'bottomvarname'}
-
-      var extentVarNames = {extent:{}},
-          inputs = template.values;
-      
-      for (var i=0;i<template.values.length;i++) {
-        var type = inputs[i].getAttribute("type"), 
-            units = inputs[i].getAttribute("units"), 
-            axis = inputs[i].getAttribute("axis"), 
-            name = inputs[i].getAttribute("name"), 
-            position = inputs[i].getAttribute("position"),
-            value = inputs[i].getAttribute("value");
-        if (type === "width") {
-              extentVarNames.extent.width = name;
-        } else if ( type === "height") {
-              extentVarNames.extent.height = name;
-        } else if (type === "location" && units === "pcrs") {
-          //<input name="..." units="pcrs" type="location" position="top|bottom-left|right" axis="northing|easting"/>
-          switch (axis) {
-            case ('easting'):
-              if (position) {
-                  if (position.match(/.*?-left/i)) {
-                    extentVarNames.extent.left = name;
-                  } else if (position.match(/.*?-right/i)) {
-                    extentVarNames.extent.right = name;
-                  }
-              }
-              break;
-            case ('northing'):
-              if (position) {
-                if (position.match(/top-.*?/i)) {
-                  extentVarNames.extent.top = name;
-                } else if (position.match(/bottom-.*?/i)) {
-                  extentVarNames.extent.bottom = name;
-                }
-              }
-              break;
-          }
-        } else if (type === "hidden") {
-           extentVarNames.extent[name] = value;
-           // <input name="foo" type="hidden" value="bar"/>
-        }
-      }
-      return extentVarNames;
-    }
-});
-M.templatedImageLayer = function(template, parent, options) {
-    return new M.TemplatedImageLayer(template, parent, options);
-};
-M.TemplatedLayer = L.Layer.extend({
-  
-  initialize: function(templates, parent, options) {
-    this._templates =  templates;
-    L.setOptions(this, options);
-    this._container = L.DomUtil.create('div', 'leaflet-layer', parent);
-    L.DomUtil.addClass(this._container,'mapml-templatedlayer');
-
-    for (var i=0;i<templates.length;i++) {
-      if (templates[i].type === 'tile') {
-          this._templates[i].layer = M.templatedTileLayer(templates[i], this._container,
-            L.Util.extend(this.options, {errorTileUrl: "data:image/gif;base64,R0lGODlhAQABAAAAACw=", zIndex: i}));
-      } else {
-          this._templates[i].layer = M.templatedImageLayer(templates[i], this._container, L.Util.extend(this.options, {zIndex: i}));
-      }
-    }
-  },
-  reset: function (templates) {
-    if (!templates) {return;}
-    var addToMap = this._templates[0].layer._map,
-        old_templates = this._templates;
-    this._templates = templates;
-    for (var i=0;i<templates.length;i++) {
-      if (templates[i].type === 'tile') {
-          this._templates[i].layer = M.templatedTileLayer(templates[i], this._container,
-            L.Util.extend(this.options, {errorTileUrl: "data:image/gif;base64,R0lGODlhAQABAAAAACw=", zIndex: i}));
-      } else {
-          this._templates[i].layer = M.templatedImageLayer(templates[i], this._container, L.Util.extend(this.options, {zIndex: i}));
-      }
-      if (addToMap) {
-        this._map.addLayer(this._templates[i].layer);
-      }
-    }
-    for (i=0;i<old_templates.length;i++) {
-      if (this._map.hasLayer(old_templates[i].layer)) {
-        this._map.removeLayer(old_templates[i].layer);
-      }
-    }
-  },
-  onAdd: function (map) {
-    for (var i=0;i<this._templates.length;i++) {
-      map.addLayer(this._templates[i].layer);
-    }
-    this.setZIndex(this.options.zIndex);
-  },
-  setZIndex: function (zIndex) {
-      this.options.zIndex = zIndex;
-      this._updateZIndex();
-
-      return this;
-  },
-  _updateZIndex: function () {
-      if (this._container && this.options.zIndex !== undefined && this.options.zIndex !== null) {
-          this._container.style.zIndex = this.options.zIndex;
-      }
-  },
-  onRemove: function (map) {
-    L.DomUtil.remove(this._container);
-    for (var i=0;i<this._templates.length;i++) {
-      map.removeLayer(this._templates[i].layer);
-    }
-  }
-});
-M.templatedLayer = function(templates, parent, options) {
-  // templates is an array of template objects
-  // a template object contains the template, plus associated <input> elements
-  // which need to be processed just prior to creating a url from the template 
-  // with the values of the inputs
-  return new M.TemplatedLayer(templates, parent, options);
-};
-// a TemplateTileLayer is similar to a L.TileLayer except its templates are
-// defined by the <extent><template/></extent>
-// content found in the MapML document.  As such, the client map does not
-// 'revisit' the server for more MapML content, it simply fills the map extent
-// with tiles for which it generates requests on demand (as the user pans/zooms/resizes
-// the map)
-M.TemplatedTileLayer = L.TileLayer.extend({
-    initialize: function(template, parent, options) {
-      this._parent = parent;
-      // call the parent constructor with the template tref value, per the 
-      // Leaflet tutorial: http://leafletjs.com/examples/extending/extending-1-classes.html#methods-of-the-parent-class
-      L.TileLayer.prototype.initialize.call(this, template.template, options);
-      L.setOptions(this, L.extend(options,this._setUpTileTemplateVars(template)));
-    },
-    // instead of being child of a pane, the TemplatedTileLayers are 'owned' by the group,
-    // and so are DOM children of the group, not the pane element (the MapMLLayer is
-    // a child of the overlay pane and always has a set of sub-layers)
-    getPane: function() {
-      return this._parent;
-    },
-    getTileUrl: function (coords) {
-        var obj = {};
-        obj[this.options.tile.col] = coords.x;
-        obj[this.options.tile.row] = coords.y;
-        obj[this.options.tile.zoom] = this._getZoomForUrl();
-        obj[this.options.tile.left] = this._tileMatrixToPCRSPosition(coords, 'top-left').x;
-        obj[this.options.tile.right] = this._tileMatrixToPCRSPosition(coords, 'top-right').x;
-        obj[this.options.tile.top] = this._tileMatrixToPCRSPosition(coords, 'top-left').y;
-        obj[this.options.tile.bottom] = this._tileMatrixToPCRSPosition(coords, 'bottom-left').y;
-        for (var v in this.options.tile) {
-            if (v !== "row" && v !== "col" && v !== "zoom" && v !== "left" && v !== "right" && v !== "top" && v !== "bottom") {
-              obj[v] = this.options.tile[v];
-            }
-        }
-        obj.r = this.options.detectRetina && L.Browser.retina && this.options.maxZoom > 0 ? '@2x' : '';
-        obj.s = this._getSubdomain(coords);  // this is hard-coded, should add an input@type for this?
-        return L.Util.template(this._url, obj);
-    },
-    _tileMatrixToPCRSPosition: function (coords, pos) {
-// this is a tile:
-// 
-//   top-left         top-center           top-right
-//      +------------------+------------------+
-//      |                  |                  |
-//      |                  |                  |
-//      |                  |                  |
-//      |                  |                  |
-//      |                  |                  |
-//      |                  |                  |
-//      + center-left    center               + center-right
-//      |                  |                  |
-//      |                  |                  |
-//      |                  |                  |
-//      |                  |                  |
-//      |                  |                  |
-//      |                  |                  |
-//      |                  |                  |
-//      +------------------+------------------+
-//   bottom-left     bottom-center      bottom-right
-
-  var map = this._map,
-      crs = map.options.crs,
-      tileSize = this.getTileSize(),
-
-      nwPoint = coords.scaleBy(tileSize),
-      sePoint = nwPoint.add(tileSize),
-      centrePoint = nwPoint.add(Math.floor(tileSize / 2)),
-
-      nw = crs.transformation.untransform(nwPoint,crs.scale(coords.z)),
-      se = crs.transformation.untransform(sePoint,crs.scale(coords.z)),
-      cen = crs.transformation.untransform(centrePoint, crs.scale(coords.z)),
-      result = null;
-
-      switch (pos) {
-        case('top-left'):
-          result = nw;
-          break;
-        case('bottom-left'):
-          result = new L.Point(nw.x,se.y);
-          break;
-        case('center-left'):
-          result = new L.Point(nw.x,cen.y);
-          break;
-        case('top-right'):
-          result = new L.Point(se.x,nw.y);
-          break;
-        case('bottom-right'):
-          result = se;
-          break;
-        case('center-right'):
-          result = new L.Point(se.x,cen.y);
-          break;
-        case('top-center'):
-          result = new L.Point(cen.x,nw.y);
-          break;
-        case('bottom-center'):
-          result = new L.Point(cen.x,se.y);
-          break;
-        case('center'):
-          result = cen;
-          break;
-      }
-      return result;
-    },
-    _setUpTileTemplateVars: function(template) {
-      // process the inputs associated to template and create an object named
-      // tile with member properties as follows:
-      // {row: 'rowvarname', 
-      //  col: 'colvarname', 
-      //  left: 'leftvarname', 
-      //  right: 'rightvarname', 
-      //  top: 'topvarname', 
-      //  bottom: 'bottomvarname'}
-
-      var tileVarNames = {tile:{}},
-          inputs = template.values;
-      
-      for (var i=0;i<template.values.length;i++) {
-        var type = inputs[i].getAttribute("type"), 
-            units = inputs[i].getAttribute("units"), 
-            axis = inputs[i].getAttribute("axis"), 
-            name = inputs[i].getAttribute("name"), 
-            position = inputs[i].getAttribute("position"),
-            value = inputs[i].getAttribute("value");
-        if (type === "location" && units === "tilematrix") {
-          switch (axis) {
-            case("column"):
-              tileVarNames.tile.col = name;
-              break;
-            case("row"):
-              tileVarNames.tile.row = name;
-              break;
-            case("easting"):
-              if (position) {
-                if (position.match(/.*?-left/i)) {
-                  tileVarNames.tile.left = name;
-                } else if (position.match(/.*?-right/i)) {
-                  tileVarNames.tile.right = name;
-                }
-              } 
-              break;
-            case("northing"):
-              if (position) {
-                if (position.match(/top-.*?/i)) {
-                  tileVarNames.tile.top = name;
-                } else if (position.match(/bottom-.*?/i)) {
-                  tileVarNames.tile.bottom = name;
-                }
-              } 
-              break;
-            default:
-              // unsuportted axis value
-          }
-        } else if (type === "zoom") {
-          //<input name="..." type="zoom" value="0" min="0" max="17"/>
-           tileVarNames.tile.zoom = name;
-        } else if (type === "hidden") {
-           tileVarNames.tile[name] = value;
-           // <input name="foo" type="hidden" value="bar"/>
-        }
-      }
-      return tileVarNames;
-    }
-});
-M.templatedTileLayer = function(template, parent, options) {
-  return new M.TemplatedTileLayer(template, parent, options);
-};
 M.MapMLLayer = L.Layer.extend({
     // zIndex has to be set, for the case where the layer is added to the
     // map before the layercontrol is used to control it (where autoZindex is used)
@@ -633,8 +171,11 @@ M.MapMLLayer = L.Layer.extend({
             this._content = content;
         }
         this._container = L.DomUtil.create('div', 'leaflet-layer');
-        L.DomUtil.addClass(this._container,'mapml-mapmlayer');
-        this._el = L.DomUtil.create('div', 'mapml-layer');
+        L.DomUtil.addClass(this._container,'mapml-layer');
+        this._imageContainer = L.DomUtil.create('div', 'leaflet-layer', this._container);
+        L.DomUtil.addClass(this._imageContainer,'mapml-image-container');
+        
+        this._el = L.DomUtil.create('div', 'mapml-tile-container');
         // hit the service to determine what its extent might be
         // OR use the extent of the content provided
         this._initCount = 0;
@@ -691,6 +232,8 @@ M.MapMLLayer = L.Layer.extend({
             this._imageLayer = L.layerGroup();
         }
         map.addLayer(this._imageLayer);
+        // the layer._imageContainer property contains an element in which
+        // content will be maintained
         
         if (!this._tileLayer) {
           this._tileLayer = M.mapMLTileLayer(this.href?this.href:this._href, this._container, this.options);
@@ -1008,7 +551,7 @@ M.MapMLLayer = L.Layer.extend({
                       imageOverlays = [],
                       // need a reference to the _imageLayer container element to pass to children
                       // so they can append the img element they create to it.
-                      container = layer._container;
+                      container = layer._imageContainer;
                   for (i=0;i<images.length;i++) {
                       var image = images[i],
                           src = image.getAttribute('src'),
@@ -1408,10 +951,484 @@ M.MapMLLayer = L.Layer.extend({
 M.mapMLLayer = function (url, node, options) {
 	return new M.MapMLLayer(url, node ? node : document.createElement('div'), options);
 };
+M.ImageOverlay = L.ImageOverlay.extend({
+	initialize: function (url, location, size, angle, container, options) { // (String, Point, Point, Number, Element, Object)
+                this._container = container;
+		this._url = url;
+                // instead of calculating where the image goes, put it at 0,0
+		//this._location = L.point(location);
+                // the location for WMS requests will be the upper left hand
+                // corner of the map.  When the map is initialized, that is 0,0,
+                // but as the user pans, of course the
+		this._location = location;
+                this._size = L.point(size);
+                this._angle = angle;
+
+		L.setOptions(this, options);
+	},
+        getEvents: function() {
+		var events = {
+			viewreset: this._reset
+		};
+
+		if (this._zoomAnimated) {
+			events.zoomanim = this._animateZoom;
+		}
+
+		return events;
+        },
+	onAdd: function () {
+                this.on({ 
+                  load: this._onImageLoad
+                  });
+
+		if (!this._image) {
+                    this._initImage();
+		}
+
+		if (this.options.interactive) {
+			L.DomUtil.addClass(this._image, 'leaflet-interactive');
+			this.addInteractiveTarget(this._image);
+		}
+
+		Polymer.dom(this._container).appendChild(this._image);
+		this._reset();
+	},
+	onRemove: function () {
+		L.DomUtil.remove(this._image);
+		if (this.options.interactive) {
+			this.removeInteractiveTarget(this._image);
+		}
+	},
+        _onImageLoad: function () {
+            if (!this._image) { return; }
+            this._image.loaded =  +new Date();
+            this._updateOpacity();
+        },
+	_animateZoom: function (e) {
+		var scale = this._map.getZoomScale(e.zoom),
+		    translate = this._map.getPixelOrigin().add(this._location).multiplyBy(scale)
+		        .subtract(this._map._getNewPixelOrigin(e.center, e.zoom)).round();
+
+		if (L.Browser.any3d) {
+			L.DomUtil.setTransform(this._image, translate, scale);
+		} else {
+			L.DomUtil.setPosition(this._image, translate);
+		}
+	},
+        _reset: function () {
+		var image = this._image,
+		    location = this._location,
+                    size = this._size,
+                    angle = 0.0;
+
+                // TBD use the angle to establish the image rotation in CSS
+
+		L.DomUtil.setPosition(image, location);
+
+		image.style.width  = size.x + 'px';
+		image.style.height = size.y + 'px';
+        },
+	_updateOpacity: function () {
+		if (!this._map) { return; }
+
+		//L.DomUtil.setOpacity(this._image, this.options.opacity);
+
+		var now = +new Date(),
+		    nextFrame = false;
+
+                var image = this._image;
+
+                var fade = Math.min(1, (now - image.loaded) / 200);
+
+                L.DomUtil.setOpacity(image, fade);
+                if (fade < 1) {
+                        nextFrame = true;
+                } 
+		if (nextFrame) {
+			L.Util.cancelAnimFrame(this._fadeFrame);
+			this._fadeFrame = L.Util.requestAnimFrame(this._updateOpacity, this);
+		}
+                L.DomUtil.addClass(image, 'leaflet-image-loaded');
+	}
+        
+});
+M.imageOverlay = function (url, location, size, angle, container, options) {
+        return new M.ImageOverlay(url, location, size, angle, container, options);
+};
+M.TemplatedImageLayer =  L.Layer.extend({
+    initialize: function(template, parent, options) {
+        this._template = template;
+        this._parent = parent;
+        this._container = L.DomUtil.create('div', 'leaflet-layer', this._parent);
+        L.DomUtil.addClass(this._container, 'mapml-image-container');
+        L.setOptions(this, L.extend(options,this._setUpExtentTemplateVars(template)));
+    },
+    getEvents: function () {
+        var events = {
+            moveend: this._onMoveEnd
+        };
+        return events;
+    },
+    onAdd: function () {
+        this.setZIndex(this.options.zIndex);
+        this._onMoveEnd();
+    },
+    _onMoveEnd: function() {
+      
+      var map = this._map,
+        loc = map.getPixelBounds().min.subtract(map.getPixelOrigin()),
+        size = map.getSize(),
+        src = this.getImageUrl(),
+        overlayToRemove = this._imageOverlay;
+        this._imageOverlay = M.imageOverlay(src,loc,size,0,this._container);
+          
+      if (overlayToRemove) {
+        this._imageOverlay.on('load', function () {map.removeLayer(overlayToRemove);});
+      }
+      this._imageOverlay.addTo(map);
+    },
+    setZIndex: function (zIndex) {
+        this.options.zIndex = zIndex;
+        this._updateZIndex();
+
+        return this;
+    },
+    _updateZIndex: function () {
+        if (this._container && this.options.zIndex !== undefined && this.options.zIndex !== null) {
+            this._container.style.zIndex = this.options.zIndex;
+        }
+    },
+    onRemove: function () {
+    },
+    getImageUrl: function() {
+        var obj = {};
+        obj[this.options.extent.width] = this._map.getSize().x;
+        obj[this.options.extent.height] = this._map.getSize().y;
+        obj[this.options.extent.bottom] = this._TCRSToPCRS(this._map.getPixelBounds().max,this._map.getZoom()).y;
+        obj[this.options.extent.left] = this._TCRSToPCRS(this._map.getPixelBounds().min, this._map.getZoom()).x;
+        obj[this.options.extent.top] = this._TCRSToPCRS(this._map.getPixelBounds().min, this._map.getZoom()).y;
+        obj[this.options.extent.right] = this._TCRSToPCRS(this._map.getPixelBounds().max,this._map.getZoom()).x;
+        return L.Util.template(this._template.template, obj);
+    },
+    _TCRSToPCRS: function(coords, zoom) {
+      // TCRS pixel point to Projected CRS point (in meters, presumably)
+      var map = this._map,
+          crs = map.options.crs,
+          loc = crs.transformation.untransform(coords,crs.scale(zoom));
+          return loc;
+    },
+    _setUpExtentTemplateVars: function(template) {
+      // process the inputs associated to template and create an object named
+      // extent with member properties as follows:
+      // {width: 'widthvarname', 
+      //  height: 'heightvarname', 
+      //  left: 'leftvarname', 
+      //  right: 'rightvarname', 
+      //  top: 'topvarname', 
+      //  bottom: 'bottomvarname'}
+
+      var extentVarNames = {extent:{}},
+          inputs = template.values;
+      
+      for (var i=0;i<template.values.length;i++) {
+        var type = inputs[i].getAttribute("type"), 
+            units = inputs[i].getAttribute("units"), 
+            axis = inputs[i].getAttribute("axis"), 
+            name = inputs[i].getAttribute("name"), 
+            position = inputs[i].getAttribute("position"),
+            value = inputs[i].getAttribute("value");
+        if (type === "width") {
+              extentVarNames.extent.width = name;
+        } else if ( type === "height") {
+              extentVarNames.extent.height = name;
+        } else if (type === "location" && units === "pcrs") {
+          //<input name="..." units="pcrs" type="location" position="top|bottom-left|right" axis="northing|easting"/>
+          switch (axis) {
+            case ('easting'):
+              if (position) {
+                  if (position.match(/.*?-left/i)) {
+                    extentVarNames.extent.left = name;
+                  } else if (position.match(/.*?-right/i)) {
+                    extentVarNames.extent.right = name;
+                  }
+              }
+              break;
+            case ('northing'):
+              if (position) {
+                if (position.match(/top-.*?/i)) {
+                  extentVarNames.extent.top = name;
+                } else if (position.match(/bottom-.*?/i)) {
+                  extentVarNames.extent.bottom = name;
+                }
+              }
+              break;
+          }
+        } else if (type === "hidden") {
+           extentVarNames.extent[name] = value;
+           // <input name="foo" type="hidden" value="bar"/>
+        }
+      }
+      return extentVarNames;
+    }
+});
+M.templatedImageLayer = function(template, parent, options) {
+    return new M.TemplatedImageLayer(template, parent, options);
+};
+M.TemplatedLayer = L.Layer.extend({
+  
+  initialize: function(templates, parent, options) {
+    this._templates =  templates;
+    L.setOptions(this, options);
+    this._container = L.DomUtil.create('div', 'leaflet-layer', parent);
+    L.DomUtil.addClass(this._container,'mapml-templatedlayer-container');
+
+    for (var i=0;i<templates.length;i++) {
+      if (templates[i].type === 'tile') {
+          this._templates[i].layer = M.templatedTileLayer(templates[i], this._container,
+            L.Util.extend(this.options, {errorTileUrl: "data:image/gif;base64,R0lGODlhAQABAAAAACw=", zIndex: i}));
+      } else {
+          this._templates[i].layer = M.templatedImageLayer(templates[i], this._container, L.Util.extend(this.options, {zIndex: i}));
+      }
+    }
+  },
+  reset: function (templates) {
+    if (!templates) {return;}
+    var addToMap = this._templates[0].layer._map,
+        old_templates = this._templates;
+    this._templates = templates;
+    for (var i=0;i<templates.length;i++) {
+      if (templates[i].type === 'tile') {
+          this._templates[i].layer = M.templatedTileLayer(templates[i], this._container,
+            L.Util.extend(this.options, {errorTileUrl: "data:image/gif;base64,R0lGODlhAQABAAAAACw=", zIndex: i}));
+      } else {
+          this._templates[i].layer = M.templatedImageLayer(templates[i], this._container, L.Util.extend(this.options, {zIndex: i}));
+      }
+      if (addToMap) {
+        this._map.addLayer(this._templates[i].layer);
+      }
+    }
+    for (i=0;i<old_templates.length;i++) {
+      if (this._map.hasLayer(old_templates[i].layer)) {
+        this._map.removeLayer(old_templates[i].layer);
+      }
+    }
+  },
+  onAdd: function (map) {
+    for (var i=0;i<this._templates.length;i++) {
+      map.addLayer(this._templates[i].layer);
+    }
+    this.setZIndex(this.options.zIndex);
+  },
+  setZIndex: function (zIndex) {
+      this.options.zIndex = zIndex;
+      this._updateZIndex();
+
+      return this;
+  },
+  _updateZIndex: function () {
+      if (this._container && this.options.zIndex !== undefined && this.options.zIndex !== null) {
+          this._container.style.zIndex = this.options.zIndex;
+      }
+  },
+  onRemove: function (map) {
+    L.DomUtil.remove(this._container);
+    for (var i=0;i<this._templates.length;i++) {
+      map.removeLayer(this._templates[i].layer);
+    }
+  }
+});
+M.templatedLayer = function(templates, parent, options) {
+  // templates is an array of template objects
+  // a template object contains the template, plus associated <input> elements
+  // which need to be processed just prior to creating a url from the template 
+  // with the values of the inputs
+  return new M.TemplatedLayer(templates, parent, options);
+};
+M.TemplatedTileLayer = L.TileLayer.extend({
+    // a TemplateTileLayer is similar to a L.TileLayer except its templates are
+    // defined by the <extent><template/></extent>
+    // content found in the MapML document.  As such, the client map does not
+    // 'revisit' the server for more MapML content, it simply fills the map extent
+    // with tiles for which it generates requests on demand (as the user pans/zooms/resizes
+    // the map)
+    initialize: function(template, parent, options) {
+      this._parent = parent;
+      // call the parent constructor with the template tref value, per the 
+      // Leaflet tutorial: http://leafletjs.com/examples/extending/extending-1-classes.html#methods-of-the-parent-class
+      L.TileLayer.prototype.initialize.call(this, template.template, options);
+      L.setOptions(this, L.extend(options,this._setUpTileTemplateVars(template)));
+    },
+    // instead of being child of a pane, the TemplatedTileLayers are 'owned' by the group,
+    // and so are DOM children of the group, not the pane element (the MapMLLayer is
+    // a child of the overlay pane and always has a set of sub-layers)
+    getPane: function() {
+      return this._parent;
+    },
+    _initContainer: function () {
+      if (this._container) { return; }
+
+      this._container = L.DomUtil.create('div', 'leaflet-layer');
+      L.DomUtil.addClass(this._container,'mapml-templated-tile-container');
+      this._updateZIndex();
+
+      if (this.options.opacity < 1) {
+        this._updateOpacity();
+      }
+
+      Polymer.dom(this.getPane()).appendChild(this._container);
+    },
+    getTileUrl: function (coords) {
+        var obj = {};
+        obj[this.options.tile.col] = coords.x;
+        obj[this.options.tile.row] = coords.y;
+        obj[this.options.tile.zoom] = this._getZoomForUrl();
+        obj[this.options.tile.left] = this._tileMatrixToPCRSPosition(coords, 'top-left').x;
+        obj[this.options.tile.right] = this._tileMatrixToPCRSPosition(coords, 'top-right').x;
+        obj[this.options.tile.top] = this._tileMatrixToPCRSPosition(coords, 'top-left').y;
+        obj[this.options.tile.bottom] = this._tileMatrixToPCRSPosition(coords, 'bottom-left').y;
+        for (var v in this.options.tile) {
+            if (v !== "row" && v !== "col" && v !== "zoom" && v !== "left" && v !== "right" && v !== "top" && v !== "bottom") {
+              obj[v] = this.options.tile[v];
+            }
+        }
+        obj.r = this.options.detectRetina && L.Browser.retina && this.options.maxZoom > 0 ? '@2x' : '';
+        obj.s = this._getSubdomain(coords);  // this is hard-coded, should add an input@type for this?
+        return L.Util.template(this._url, obj);
+    },
+    _tileMatrixToPCRSPosition: function (coords, pos) {
+// this is a tile:
+// 
+//   top-left         top-center           top-right
+//      +------------------+------------------+
+//      |                  |                  |
+//      |                  |                  |
+//      |                  |                  |
+//      |                  |                  |
+//      |                  |                  |
+//      |                  |                  |
+//      + center-left    center               + center-right
+//      |                  |                  |
+//      |                  |                  |
+//      |                  |                  |
+//      |                  |                  |
+//      |                  |                  |
+//      |                  |                  |
+//      |                  |                  |
+//      +------------------+------------------+
+//   bottom-left     bottom-center      bottom-right
+
+  var map = this._map,
+      crs = map.options.crs,
+      tileSize = this.getTileSize(),
+
+      nwPoint = coords.scaleBy(tileSize),
+      sePoint = nwPoint.add(tileSize),
+      centrePoint = nwPoint.add(Math.floor(tileSize / 2)),
+
+      nw = crs.transformation.untransform(nwPoint,crs.scale(coords.z)),
+      se = crs.transformation.untransform(sePoint,crs.scale(coords.z)),
+      cen = crs.transformation.untransform(centrePoint, crs.scale(coords.z)),
+      result = null;
+
+      switch (pos) {
+        case('top-left'):
+          result = nw;
+          break;
+        case('bottom-left'):
+          result = new L.Point(nw.x,se.y);
+          break;
+        case('center-left'):
+          result = new L.Point(nw.x,cen.y);
+          break;
+        case('top-right'):
+          result = new L.Point(se.x,nw.y);
+          break;
+        case('bottom-right'):
+          result = se;
+          break;
+        case('center-right'):
+          result = new L.Point(se.x,cen.y);
+          break;
+        case('top-center'):
+          result = new L.Point(cen.x,nw.y);
+          break;
+        case('bottom-center'):
+          result = new L.Point(cen.x,se.y);
+          break;
+        case('center'):
+          result = cen;
+          break;
+      }
+      return result;
+    },
+    _setUpTileTemplateVars: function(template) {
+      // process the inputs associated to template and create an object named
+      // tile with member properties as follows:
+      // {row: 'rowvarname', 
+      //  col: 'colvarname', 
+      //  left: 'leftvarname', 
+      //  right: 'rightvarname', 
+      //  top: 'topvarname', 
+      //  bottom: 'bottomvarname'}
+
+      var tileVarNames = {tile:{}},
+          inputs = template.values;
+      
+      for (var i=0;i<template.values.length;i++) {
+        var type = inputs[i].getAttribute("type"), 
+            units = inputs[i].getAttribute("units"), 
+            axis = inputs[i].getAttribute("axis"), 
+            name = inputs[i].getAttribute("name"), 
+            position = inputs[i].getAttribute("position"),
+            value = inputs[i].getAttribute("value");
+        if (type === "location" && units === "tilematrix") {
+          switch (axis) {
+            case("column"):
+              tileVarNames.tile.col = name;
+              break;
+            case("row"):
+              tileVarNames.tile.row = name;
+              break;
+            case("easting"):
+              if (position) {
+                if (position.match(/.*?-left/i)) {
+                  tileVarNames.tile.left = name;
+                } else if (position.match(/.*?-right/i)) {
+                  tileVarNames.tile.right = name;
+                }
+              } 
+              break;
+            case("northing"):
+              if (position) {
+                if (position.match(/top-.*?/i)) {
+                  tileVarNames.tile.top = name;
+                } else if (position.match(/bottom-.*?/i)) {
+                  tileVarNames.tile.bottom = name;
+                }
+              } 
+              break;
+            default:
+              // unsuportted axis value
+          }
+        } else if (type === "zoom") {
+          //<input name="..." type="zoom" value="0" min="0" max="17"/>
+           tileVarNames.tile.zoom = name;
+        } else if (type === "hidden") {
+           tileVarNames.tile[name] = value;
+           // <input name="foo" type="hidden" value="bar"/>
+        }
+      }
+      return tileVarNames;
+    }
+});
+M.templatedTileLayer = function(template, parent, options) {
+  return new M.TemplatedTileLayer(template, parent, options);
+};
 M.MapMLTileLayer = L.TileLayer.extend({
     initialize: function(url, parent, options) {
         this._parent = parent;
-        this._container = L.DomUtil.create('div','leaflet-layer', parent);
+        this._initContainer();
         L.TileLayer.prototype.initialize.call(this, url, options);
         L.setOptions(this, options);
     },
@@ -1419,6 +1436,7 @@ M.MapMLTileLayer = L.TileLayer.extend({
 		if (this._container) { return; }
 
 		this._container = L.DomUtil.create('div', 'leaflet-layer', this._parent);
+    L.DomUtil.addClass(this._container,'mapml-tilelayer-container');
 		this._updateZIndex();
 
 		if (this.options.opacity < 1) {
@@ -1688,7 +1706,6 @@ M.MapMLTileLayer = L.TileLayer.extend({
 		}
 	}
 });
-
 M.mapMLTileLayer = function (url, parent, options) {
 	return new M.MapMLTileLayer(url, parent, options);
 };
@@ -1698,15 +1715,15 @@ M.MapMLTileLayer.addInitHook(function () {
         this._tileLoad(img);
     }, this);
 });
-
-/*
- * M.MapML turns any MapML feature data into a Leaflet layer. Based on L.GeoJSON.
- */
-
 M.MapMLFeatures = L.FeatureGroup.extend({
+  /*
+   * M.MapML turns any MapML feature data into a Leaflet layer. Based on L.GeoJSON.
+   */
+
 	initialize: function (mapml, parent, options) {
     
     this._container = L.DomUtil.create('div','leaflet-layer', parent);
+    L.DomUtil.addClass(this._container,'mapml-vector-container');
 		L.setOptions(this, options);
 
 		this._layers = {};
@@ -1793,7 +1810,6 @@ M.MapMLFeatures = L.FeatureGroup.extend({
 		}
 	}
 });
-
 L.extend(M.MapMLFeatures, {
 	geometryToLayer: function (mapml, pointToLayer, coordsToLatLng, vectorOptions) {
 		var geometry = mapml.tagName.toUpperCase() === 'FEATURE' ? mapml.getElementsByTagName('geometry')[0] : mapml,
@@ -1919,14 +1935,11 @@ L.extend(M.MapMLFeatures, {
 		return coords;
 	}
 });
- 
 M.mapMlFeatures = function (mapml, parent, options) {
 	return new M.MapMLFeatures(mapml, parent, options);
 };
-
-
-/* removes 'base' layers as a concept */
 M.MapMLLayerControl = L.Control.Layers.extend({
+    /* removes 'base' layers as a concept */
     options: {
       autoZIndex: false
     },
