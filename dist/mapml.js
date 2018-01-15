@@ -458,6 +458,7 @@ M.TemplatedImageLayer =  L.Layer.extend({
         this._template = template;
         this._parent = parent;
         this._container = L.DomUtil.create('div', 'leaflet-layer', this._parent);
+        L.DomUtil.addClass(this._container, 'mapml-templatedimagelayer');
         L.setOptions(this, L.extend(options,this._setUpExtentTemplateVars(template)));
     },
     getEvents: function () {
@@ -577,13 +578,14 @@ M.TemplatedLayer = L.Layer.extend({
     this._templates =  templates;
     L.setOptions(this, options);
     this._container = L.DomUtil.create('div', 'leaflet-layer', parent);
+    L.DomUtil.addClass(this._container,'mapml-templatedlayer');
 
     for (var i=0;i<templates.length;i++) {
       if (templates[i].type === 'tile') {
-          this._templates[i].layer = M.templatedTileLayer(templates[i], parent,
+          this._templates[i].layer = M.templatedTileLayer(templates[i], this._container,
             L.Util.extend(this.options, {errorTileUrl: "data:image/gif;base64,R0lGODlhAQABAAAAACw=", zIndex: i}));
       } else {
-          this._templates[i].layer = M.templatedImageLayer(templates[i], parent, L.Util.extend(this.options, {zIndex: i}));
+          this._templates[i].layer = M.templatedImageLayer(templates[i], this._container, L.Util.extend(this.options, {zIndex: i}));
       }
     }
   },
@@ -594,10 +596,10 @@ M.TemplatedLayer = L.Layer.extend({
     this._templates = templates;
     for (var i=0;i<templates.length;i++) {
       if (templates[i].type === 'tile') {
-          this._templates[i].layer = M.templatedTileLayer(templates[i], this._container.parentNode,
+          this._templates[i].layer = M.templatedTileLayer(templates[i], this._container,
             L.Util.extend(this.options, {errorTileUrl: "data:image/gif;base64,R0lGODlhAQABAAAAACw=", zIndex: i}));
       } else {
-          this._templates[i].layer = M.templatedImageLayer(templates[i], this._container.parentNode, L.Util.extend(this.options, {zIndex: i}));
+          this._templates[i].layer = M.templatedImageLayer(templates[i], this._container, L.Util.extend(this.options, {zIndex: i}));
       }
       if (addToMap) {
         this._map.addLayer(this._templates[i].layer);
@@ -828,6 +830,7 @@ M.MapMLLayer = L.Layer.extend({
             this._content = content;
         }
         this._container = L.DomUtil.create('div', 'leaflet-layer');
+        L.DomUtil.addClass(this._container,'mapml-mapmlayer');
         this._el = L.DomUtil.create('div', 'mapml-layer');
         // hit the service to determine what its extent might be
         // OR use the extent of the content provided
@@ -1606,6 +1609,7 @@ M.MapMLTileLayer = L.TileLayer.extend({
     initialize: function(url, parent, options) {
         this._parent = parent;
         this._container = L.DomUtil.create('div','leaflet-layer', parent);
+        L.DomUtil.addClass(this._container,'mapml-tilelayer');
         L.TileLayer.prototype.initialize.call(this, url, options);
         L.setOptions(this, options);
     },
@@ -1628,6 +1632,9 @@ M.MapMLTileLayer = L.TileLayer.extend({
 
 		return events;
 	},
+        getPane: function() {
+          return this._parent;
+        },
 	_onMapMLProcessed: function () {
             if (!this._map) { return; }
             if (L.DomUtil.hasClass(this._map.getPane('mapPane'),'leaflet-zoom-anim')) { return; }
