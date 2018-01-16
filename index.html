@@ -18,17 +18,22 @@
     <div id="cbmtile-map" style="height: 300px;width: 40%;"></div>
     <script>
         addEventListener('WebComponentsReady', function() {
-                     cbmt =  M.mapMLLayer('tile-cache-CBMTILE.mapml'),
+                     cbmt =  M.mapMLLayer('http://geogratis.gc.ca/api/beta/mapml/en/cbmtile/cbmt/',null,{zIndex: 0}),
+                     cubewerx = M.mapMLLayer('https://tb13.cubewerx.com/cubewerx/cubeserv/default/wmts/1.0.0/mapML/gtopo30.gtopo30?projection=CBMTILE',null,{zIndex: 1}),
+                     nts = M.mapMLLayer('http://geogratis.gc.ca/api/beta/mapml/en/cbmtile/nts/',null,{zIndex: 3}),
+                     te = M.mapMLLayer('http://geogratis.gc.ca/mapml/en/cbmtile/te2003/',null,{zIndex: 5}),
+                     f = M.mapMLLayer('http://geogratis.gc.ca/api/beta/vectors/canvec/50k/features/',null,{zIndex: 7}),
+                     f2 = M.mapMLLayer('http://geogratis.gc.ca/api/beta/vectors/canvec/50k/features/',null,{zIndex: 9}),
           cbmtMap =    L.map('cbmtile-map',{
                   center: [45.398043,-75.70683],
                   projection: 'CBMTILE',
                   crs: M['CBMTILE'],
                   zoom: 14,
-                  layers: [cbmt],
+                  layers: [cbmt,cubewerx,nts,te,f,f2],
             // See https://github.com/Maps4HTML/MapML-Leaflet-Client/issues/24 
                   fadeAnimation: true
                 }),
-          cbmtLayerControl = M.mapMlLayerControl({'Canada Base Map':cbmt},{"collapsed":true}).addTo(cbmtMap);
+          cbmtLayerControl = M.mapMlLayerControl({'Canada Base Map':cbmt,'Cubewerx':cubewerx,'NTS Grid':nts,'Territorial Evolution':te,'Features':f,'Features2':f2},{"collapsed":false}).addTo(cbmtMap);
           cbmtMap.attributionControl.setPrefix('<a href="https://www.w3.org/community/maps4html/" title="W3C Maps4HTML Community Group">MapML</a>');
 //          marker = L.marker([45.398043,-75.70683],{draggable:true}).addTo(cbmtMap);
         });
