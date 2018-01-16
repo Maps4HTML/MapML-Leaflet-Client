@@ -175,7 +175,9 @@ M.MapMLLayer = L.Layer.extend({
         this._imageContainer = L.DomUtil.create('div', 'leaflet-layer', this._container);
         L.DomUtil.addClass(this._imageContainer,'mapml-image-container');
         
-        this._el = L.DomUtil.create('div', 'mapml-tile-container');
+        // this layer 'owns' a mapmlTileLayer, which is a subclass of L.GridLayer
+        // it 'passes' what tiles to load via the content of this._mapmlTileContainer
+        this._mapmlTileContainer = L.DomUtil.create('div', 'mapml-tile-container');
         // hit the service to determine what its extent might be
         // OR use the extent of the content provided
         this._initCount = 0;
@@ -242,11 +244,11 @@ M.MapMLLayer = L.Layer.extend({
         // content will be maintained
         
         if (!this._tileLayer) {
-          this._tileLayer = M.mapMLTileLayer(this.href?this.href:this._href, this._container, this.options);
+          this._tileLayer = M.mapMLTileLayer(this.href?this.href:this._href, {pane: this._container});
         }
-        this._tileLayer._el = this._el;
+        this._tileLayer._mapmlTileContainer = this._mapmlTileContainer;
         map.addLayer(this._tileLayer);       
-        this._tileLayer._container.appendChild(this._el);
+        this._tileLayer._container.appendChild(this._mapmlTileContainer);
         // if the extent has been initialized and received, update the map,
         /* TODO establish the minZoom, maxZoom for the _tileLayer based on
          * info received from mapml server. */
@@ -458,8 +460,6 @@ M.MapMLLayer = L.Layer.extend({
                 }
                 
                 layer._title = mapml.querySelector('title').textContent;
-                // BUG https://github.com/Maps4HTML/Web-Map-Custom-Element/issues/29
-                //layer._el.appendChild(document.importNode(serverExtent,true));
                 if (layer._map) {
                     layer._validateExtent();
                     // if the layer is checked in the layer control, force the addition
@@ -550,7 +550,7 @@ M.MapMLLayer = L.Layer.extend({
                   for (i=0;i<newTiles.length;i++) {
                       Polymer.dom(tiles).appendChild(document.importNode(newTiles[i], true));
                   }
-                  layer._el.appendChild(tiles);
+                  layer._mapmlTileContainer.appendChild(tiles);
               }
               if (mapml.querySelector('image')) {
                   var images = mapml.getElementsByTagName('image'),
@@ -590,8 +590,8 @@ M.MapMLLayer = L.Layer.extend({
                   requestCounter++;
                   _pull(next, _processMapMLFeedResponse);
               } else {
-                  if (layer._el.getElementsByTagName('tile').length > 0) {
-                      layer._tileLayer._onMapMLProcessed();
+                  if (layer._mapmlTileContainer.getElementsByTagName('tile').length > 0) {
+                    layer._tileLayer._onMapMLProcessed();
                   }
                   layer.fire('extentload', layer, true);
               }
@@ -829,8 +829,8 @@ M.MapMLLayer = L.Layer.extend({
         }
     },
     _initEl: function () {
-        if (!this._el) {return;}
-        var container = this._el;
+        if (!this._mapmlTileContainer) {return;}
+        var container = this._mapmlTileContainer;
         while (container.firstChild)
             container.removeChild(container.firstChild);
     },
@@ -856,8 +856,8 @@ M.MapMLLayer = L.Layer.extend({
     _calculateUrl: function() {
         
         if (!this._map) return null;
-        if (!this._el && !this._extent) return this._href;
-        var extent = this._el.getElementsByTagName('extent')[0] || this._extent;
+        if (!this._mapmlTileContainer && !this._extent) return this._href;
+        var extent = this._extent;
         if (!extent) return this._href;
         var action = extent.getAttribute("action"),
                 base = new URI(this._href);
@@ -877,6 +877,8 @@ M.MapMLLayer = L.Layer.extend({
           } else if (extent.zoomout && mapZoom < min) {
             this._href = extent.zoomout;
           }
+        } else {
+          return null;
         }
         
         if (!action || action === "synthetic") return null;
@@ -915,20 +917,8 @@ M.MapMLLayer = L.Layer.extend({
         bboxTemplate += ymaxName + "={" + ymaxName + "}";
         
         // establish the range of zoom values for the extent
-        var zoom = extent.querySelectorAll("input[type=zoom]")[0];
-        if ( !zoom || !projection) return null;
+        if (!projection) return null;
 
-        var min = parseInt(zoom.getAttribute("min")),
-            max = parseInt(zoom.getAttribute("max")),
-            values = {}, // the values object will contain the values for the URI template
-            mapZoom = this._map.getZoom();
-        // check that the zoom of the map is in the range of the zoom of the service
-        if ( min <= mapZoom && mapZoom <= max) {
-          values.zoom = mapZoom;
-        } else {
-          return null;
-        }
-        
         var zoomName = zoom.getAttribute('name')?zoom.getAttribute('name').trim():'zoom';
         var zoomTemplate = zoomName + "={" + zoomName + "}";
 
@@ -1432,24 +1422,22 @@ M.templatedTileLayer = function(template, parent, options) {
   return new M.TemplatedTileLayer(template, parent, options);
 };
 M.MapMLTileLayer = L.TileLayer.extend({
-    initialize: function(url, parent, options) {
-        this._parent = parent;
-        this._initContainer();
-        L.TileLayer.prototype.initialize.call(this, url, options);
+    initialize: function(url, options) {
         L.setOptions(this, options);
+        L.TileLayer.prototype.initialize.call(this, url, options);
     },
-	_initContainer: function () {
-		if (this._container) { return; }
+    _initContainer: function () {
+          if (this._container) { return; }
 
-		this._container = L.DomUtil.create('div', 'leaflet-layer', this._parent);
-    L.DomUtil.addClass(this._container,'mapml-tilelayer-container');
-		this._updateZIndex();
+          this._container = L.DomUtil.create('div', 'leaflet-layer', this.getPane());
+          L.DomUtil.addClass(this._container,'mapml-tilelayer-container');
+          this._updateZIndex();
 
-		if (this.options.opacity < 1) {
-			this._updateOpacity();
-		}
-	},
-	getEvents: function () {
+          if (this.options.opacity < 1) {
+            this._updateOpacity();
+          }
+    },
+    getEvents: function () {
 		var events = {};
                 // doing updates on move causes too much jank...
 		if (this._zoomAnimated) {
@@ -1458,14 +1446,8 @@ M.MapMLTileLayer = L.TileLayer.extend({
 
 		return events;
 	},
-        // in L.GridLayer, the 'pane' is an option that can be set on creation.
-        // that approach won't work in MapML, because a MapML layer contains
-        // different layer types in order that all sub-layers are managed 
-        // together.  So we use a DOM node with class mapml-mapmllayer to 
-        // contain all the sub-layers. Each of those layers has its own _container
-        // node, but they are all rooted at the parent div.mapml-mapmllayer
         getPane: function() {
-          return this._parent;
+          return this.options.pane;
         },
 	_onMapMLProcessed: function () {
             if (!this._map) { return; }
@@ -1501,7 +1483,7 @@ M.MapMLTileLayer = L.TileLayer.extend({
              * 'stack' to form a composite image.  Such URLs would necessarily
              * be different, so that should be permitted by the grouping.
              * */
-            var tiles = this._groupTiles(this._el.getElementsByTagName('tile'));
+            var tiles = this._groupTiles(this._mapmlTileContainer.getElementsByTagName('tile'));
             for (var key in this._tiles) {
                 this._tiles[key].current = false;
             }
@@ -1712,8 +1694,8 @@ M.MapMLTileLayer = L.TileLayer.extend({
 		}
 	}
 });
-M.mapMLTileLayer = function (url, parent, options) {
-	return new M.MapMLTileLayer(url, parent, options);
+M.mapMLTileLayer = function (url, options) {
+	return new M.MapMLTileLayer(url, options);
 };
 M.MapMLTileLayer.addInitHook(function () {
     this.on('tileload', function (e) {
