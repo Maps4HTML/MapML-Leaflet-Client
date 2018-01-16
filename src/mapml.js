@@ -203,7 +203,13 @@ M.MapMLLayer = L.Layer.extend({
     onAdd: function (map) {
         this._map = map;
         if (!this._mapmlvectors) {
-          this._mapmlvectors = M.mapMlFeatures(null, this._container, {
+          this._mapmlvectors = M.mapMlFeatures(null, {
+              // pass the vector layer a renderer of its own, otherwise leaflet
+              // puts everything into the overlayPane
+              renderer: L.svg(),
+              // pass the vector layer the container for the parent into which
+              // it will append its own container for rendering into
+              pane: this._container,
               opacity: this.options.opacity,
               onEachFeature: function(feature, layer) {
                 var type;
@@ -1719,21 +1725,21 @@ M.MapMLFeatures = L.FeatureGroup.extend({
   /*
    * M.MapML turns any MapML feature data into a Leaflet layer. Based on L.GeoJSON.
    */
-
-	initialize: function (mapml, parent, options) {
+    initialize: function (mapml, options) {
     
-    this._container = L.DomUtil.create('div','leaflet-layer', parent);
-    L.DomUtil.addClass(this._container,'mapml-vector-container');
-		L.setOptions(this, options);
+      L.setOptions(this, L.extend(this.options, options));
+      this._container = L.DomUtil.create('div','leaflet-layer', this.options.pane);
+      L.DomUtil.addClass(this._container,'mapml-vector-container');
+      L.setOptions(this.options.renderer, {pane: this._container});
 
-		this._layers = {};
+      this._layers = {};
 
-		if (mapml) {
-			this.addData(mapml);
-		}
-	},
+          if (mapml) {
+                  this.addData(mapml);
+          }
+    },
 
-	addData: function (mapml) {
+    addData: function (mapml) {
 		var features = mapml.nodeType === Node.DOCUMENT_NODE || mapml.nodeName === "LAYER-" ? mapml.getElementsByTagName("feature") : null,
 		    i, len, feature;
             
@@ -1935,8 +1941,8 @@ L.extend(M.MapMLFeatures, {
 		return coords;
 	}
 });
-M.mapMlFeatures = function (mapml, parent, options) {
-	return new M.MapMLFeatures(mapml, parent, options);
+M.mapMlFeatures = function (mapml, options) {
+	return new M.MapMLFeatures(mapml, options);
 };
 M.MapMLLayerControl = L.Control.Layers.extend({
     /* removes 'base' layers as a concept */
