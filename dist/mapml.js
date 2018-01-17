@@ -451,13 +451,13 @@ M.MapMLLayer = L.Layer.extend({
          * info received from mapml server. */
         if (this._extent) {
             if (this._templateVars) {
-              this._templatedLayer = M.templatedLayer(this._templateVars, this._container, this.options).addTo(map);
+              this._templatedLayer = M.templatedLayer(this._templateVars, {pane: this._container}).addTo(map);
             }
             this._onMoveEnd();
         } else {
             this.once('extentload', function() {
                 if (this._templateVars) {
-                  this._templatedLayer = M.templatedLayer(this._templateVars, this._container, this.options).addTo(map);
+                  this._templatedLayer = M.templatedLayer(this._templateVars, {pane: this._container}).addTo(map);
                 }
               }, this);
             // if we get to this point and there is no this._extent, it means
@@ -621,7 +621,7 @@ M.MapMLLayer = L.Layer.extend({
                     var t = tlist[i],
                         template = t.getAttribute('tref'), v,
                         vcount=template.match(varNamesRe),
-                        ttype = (!t.hasAttribute('type') || t.getAttribute('type') === 'tile') ? 'tile' : 'image',
+                        ttype = (!t.hasAttribute('type') || t.getAttribute('type').toLowerCase() === 'tile') ? 'tile' : t.getAttribute('type').toLowerCase(),
                         inputs = [];
                     while ((v = varNamesRe.exec(template)) !== null) {
                       var varName = v[1],
@@ -1250,10 +1250,9 @@ M.imageOverlay = function (url, location, size, angle, container, options) {
         return new M.ImageOverlay(url, location, size, angle, container, options);
 };
 M.TemplatedImageLayer =  L.Layer.extend({
-    initialize: function(template, parent, options) {
+    initialize: function(template, options) {
         this._template = template;
-        this._parent = parent;
-        this._container = L.DomUtil.create('div', 'leaflet-layer', this._parent);
+        this._container = L.DomUtil.create('div', 'leaflet-layer', options.pane);
         L.DomUtil.addClass(this._container, 'mapml-image-container');
         L.setOptions(this, L.extend(options,this._setUpExtentTemplateVars(template)));
     },
@@ -1365,40 +1364,117 @@ M.TemplatedImageLayer =  L.Layer.extend({
       return extentVarNames;
     }
 });
-M.templatedImageLayer = function(template, parent, options) {
-    return new M.TemplatedImageLayer(template, parent, options);
+M.templatedImageLayer = function(template, options) {
+    return new M.TemplatedImageLayer(template, options);
 };
 M.TemplatedLayer = L.Layer.extend({
   
-  initialize: function(templates, parent, options) {
+  initialize: function(templates, options) {
     this._templates =  templates;
     L.setOptions(this, options);
-    this._container = L.DomUtil.create('div', 'leaflet-layer', parent);
+    this._container = L.DomUtil.create('div', 'leaflet-layer', options.pane);
     L.DomUtil.addClass(this._container,'mapml-templatedlayer-container');
 
     for (var i=0;i<templates.length;i++) {
       if (templates[i].type === 'tile') {
-          this._templates[i].layer = M.templatedTileLayer(templates[i], this._container,
-            L.Util.extend(this.options, {errorTileUrl: "data:image/gif;base64,R0lGODlhAQABAAAAACw=", zIndex: i}));
-      } else {
-          this._templates[i].layer = M.templatedImageLayer(templates[i], this._container, L.Util.extend(this.options, {zIndex: i}));
+          this._templates[i].layer = M.templatedTileLayer(templates[i], 
+            L.Util.extend(options, {errorTileUrl: "data:image/gif;base64,R0lGODlhAQABAAAAACw=", zIndex: i, pane: this._container}));
+      } else if (templates[i].type === 'image') {
+          this._templates[i].layer = M.templatedImageLayer(templates[i], L.Util.extend(options, {zIndex: i, pane: this._container}));
+      } else if (templates[i].type === 'query') {
+          // add template to array of queryies to be added to map and processed
+          // on click/tap events
+          if (!this._queries) {
+            this._queries = [];
+          }
+          this._queries.push(L.extend(templates[i], this._setupQueryVars(templates[i])));
       }
     }
+  },
+  _setupQueryVars: function(template) {
+      // process the inputs associated to template and create an object named
+      // query with member properties as follows:
+      // {width: 'widthvarname', 
+      //  height: 'heightvarname', 
+      //  left: 'leftvarname', 
+      //  right: 'rightvarname', 
+      //  top: 'topvarname', 
+      //  bottom: 'bottomvarname'
+      //  x: 'xvarname'
+      //  y: 'yvarname'}
+
+      var queryVarNames = {query:{}},
+          inputs = template.values;
+      
+      for (var i=0;i<template.values.length;i++) {
+        var type = inputs[i].getAttribute("type"), 
+            units = inputs[i].getAttribute("units"), 
+            axis = inputs[i].getAttribute("axis"), 
+            name = inputs[i].getAttribute("name"), 
+            position = inputs[i].getAttribute("position"),
+            value = inputs[i].getAttribute("value");
+        if (type === "width") {
+              queryVarNames.query.width = name;
+        } else if ( type === "height") {
+              queryVarNames.query.height = name;
+        } else if (type === "location" && units === "pcrs") {
+          //<input name="..." units="pcrs" type="location" position="top|bottom-left|right" axis="northing|easting"/>
+          switch (axis) {
+            case ('easting'):
+              if (position) {
+                  if (position.match(/.*?-left/i)) {
+                    queryVarNames.query.left = name;
+                  } else if (position.match(/.*?-right/i)) {
+                    queryVarNames.query.right = name;
+                  }
+              }
+              break;
+            case ('northing'):
+              if (position) {
+                if (position.match(/top-.*?/i)) {
+                  queryVarNames.query.top = name;
+                } else if (position.match(/bottom-.*?/i)) {
+                  queryVarNames.query.bottom = name;
+                }
+              }
+              break;
+          }
+        } else if (type === "location" && units === "relative") {
+          // <input name="..." type="location" units="relative" axis="x|y"/>
+          if (axis === "x") {
+            queryVarNames.query.x = name;
+          } else if (axis === "y") {
+              queryVarNames.query.y = name;
+          }
+        } else if (type === "hidden") {
+           queryVarNames.query[name] = value;
+           // <input name="foo" type="hidden" value="bar"/>
+        }
+      }
+      return queryVarNames;
   },
   reset: function (templates) {
     if (!templates) {return;}
     var addToMap = this._templates[0].layer._map,
         old_templates = this._templates;
+    delete this._queries;
     this._templates = templates;
     for (var i=0;i<templates.length;i++) {
       if (templates[i].type === 'tile') {
           this._templates[i].layer = M.templatedTileLayer(templates[i], this._container,
-            L.Util.extend(this.options, {errorTileUrl: "data:image/gif;base64,R0lGODlhAQABAAAAACw=", zIndex: i}));
-      } else {
-          this._templates[i].layer = M.templatedImageLayer(templates[i], this._container, L.Util.extend(this.options, {zIndex: i}));
+            L.Util.extend(this.options, {errorTileUrl: "data:image/gif;base64,R0lGODlhAQABAAAAACw=", zIndex: i, pane: this._container}));
+      } else if (templates[i].type === 'image') {
+          this._templates[i].layer = M.templatedImageLayer(templates[i], L.Util.extend(this.options, {zIndex: i, pane: this._container}));
+      } else if (templates[i].type === 'query') {
+          if (!this._queries) {
+            this._queries = [];
+          }
+          this._queries.push(L.extend(templates[i], this._setupQueryVars(templates[i])));
       }
       if (addToMap) {
-        this._map.addLayer(this._templates[i].layer);
+        if (this._templates[i].type !== 'query') {
+          this._map.addLayer(this._templates[i].layer);
+        }
       }
     }
     for (i=0;i<old_templates.length;i++) {
@@ -1409,34 +1485,87 @@ M.TemplatedLayer = L.Layer.extend({
   },
   onAdd: function (map) {
     for (var i=0;i<this._templates.length;i++) {
-      map.addLayer(this._templates[i].layer);
-    }
-    this.setZIndex(this.options.zIndex);
-  },
-  setZIndex: function (zIndex) {
-      this.options.zIndex = zIndex;
-      this._updateZIndex();
-
-      return this;
-  },
-  _updateZIndex: function () {
-      if (this._container && this.options.zIndex !== undefined && this.options.zIndex !== null) {
-          this._container.style.zIndex = this.options.zIndex;
+      if (this._templates[i].type !== 'query') {
+        map.addLayer(this._templates[i].layer);
       }
+    }
+//    this.setZIndex(this.options.zIndex);
+    if (this._queries) {
+      map.on('click', handleClick, this);
+    }
+
+    var popup = L.popup({autoPan: false});
+    function handleClick(e) {
+      
+      var obj = {},
+          template = this._queries[0],
+          bounds = e.target.getPixelBounds(),
+          zoom = e.target.getZoom(),
+          map = e.target,
+          crs = map.options.crs,
+          tcrs2pcrs = function (c) {
+            return crs.transformation.untransform(c,crs.scale(zoom));
+          };
+      obj[template.query.x] = e.containerPoint.x.toFixed();
+      obj[template.query.y] = e.containerPoint.y.toFixed();
+      obj[template.query.width] = map.getSize().x;
+      obj[template.query.height] = map.getSize().y;
+
+      obj[template.query.width] = map.getSize().x;
+      obj[template.query.height] = map.getSize().y;
+      obj[template.query.bottom] = tcrs2pcrs(bounds.max).y;
+      obj[template.query.left] = tcrs2pcrs(bounds.min).x;
+      obj[template.query.top] = tcrs2pcrs(bounds.min).y;
+      obj[template.query.right] = tcrs2pcrs(bounds.max).x;
+      
+      fetch(L.Util.template(template.template, obj)).then(
+          function(response) {
+            if (response.status !== 200) {
+              console.log('Looks like there was a problem. Status Code: ' +
+                response.status);
+              return response.text();
+            }
+
+             //Examine the text in the response
+            response.text().then(function(data) {
+              popup.setContent(data);
+            });
+          }
+        ).catch(function(err) {
+          console.log('Fetch Error :-S', err);
+        });
+      
+      popup.setLatLng(e.latlng).openOn(map);
+    }
   },
+//  setZIndex: function (zIndex) {
+//      this.options.zIndex = zIndex;
+//      this._updateZIndex();
+//
+//      return this;
+//  },
+//  _updateZIndex: function () {
+//      if (this._container && this.options.zIndex !== undefined && this.options.zIndex !== null) {
+//          this._container.style.zIndex = this.options.zIndex;
+//      }
+//  },
   onRemove: function (map) {
     L.DomUtil.remove(this._container);
     for (var i=0;i<this._templates.length;i++) {
-      map.removeLayer(this._templates[i].layer);
+      if (this._templates[i].type !== 'query') {
+        map.removeLayer(this._templates[i].layer);
+      } else {
+        map.off('click', 'handleClick');
+      }
     }
   }
 });
-M.templatedLayer = function(templates, parent, options) {
+M.templatedLayer = function(templates, options) {
   // templates is an array of template objects
   // a template object contains the template, plus associated <input> elements
   // which need to be processed just prior to creating a url from the template 
   // with the values of the inputs
-  return new M.TemplatedLayer(templates, parent, options);
+  return new M.TemplatedLayer(templates, options);
 };
 M.TemplatedTileLayer = L.TileLayer.extend({
     // a TemplateTileLayer is similar to a L.TileLayer except its templates are
@@ -1445,31 +1574,29 @@ M.TemplatedTileLayer = L.TileLayer.extend({
     // 'revisit' the server for more MapML content, it simply fills the map extent
     // with tiles for which it generates requests on demand (as the user pans/zooms/resizes
     // the map)
-    initialize: function(template, parent, options) {
-      this._parent = parent;
+    initialize: function(template, options) {
+      L.setOptions(this, L.extend(options,this._setUpTileTemplateVars(template)));
+      this._initContainer();
       // call the parent constructor with the template tref value, per the 
       // Leaflet tutorial: http://leafletjs.com/examples/extending/extending-1-classes.html#methods-of-the-parent-class
-      L.TileLayer.prototype.initialize.call(this, template.template, options);
-      L.setOptions(this, L.extend(options,this._setUpTileTemplateVars(template)));
+      L.TileLayer.prototype.initialize.call(this, template.template, L.extend(options, {pane: this._container}));
     },
     // instead of being child of a pane, the TemplatedTileLayers are 'owned' by the group,
     // and so are DOM children of the group, not the pane element (the MapMLLayer is
     // a child of the overlay pane and always has a set of sub-layers)
     getPane: function() {
-      return this._parent;
+      return this.options.pane;
     },
     _initContainer: function () {
       if (this._container) { return; }
 
-      this._container = L.DomUtil.create('div', 'leaflet-layer');
+      this._container = L.DomUtil.create('div', 'leaflet-layer', this.options.pane);
       L.DomUtil.addClass(this._container,'mapml-templated-tile-container');
       this._updateZIndex();
 
       if (this.options.opacity < 1) {
         this._updateOpacity();
       }
-
-      Polymer.dom(this.getPane()).appendChild(this._container);
     },
     getTileUrl: function (coords) {
         var obj = {};
@@ -1615,8 +1742,8 @@ M.TemplatedTileLayer = L.TileLayer.extend({
       return tileVarNames;
     }
 });
-M.templatedTileLayer = function(template, parent, options) {
-  return new M.TemplatedTileLayer(template, parent, options);
+M.templatedTileLayer = function(template, options) {
+  return new M.TemplatedTileLayer(template, options);
 };
 M.MapMLTileLayer = L.TileLayer.extend({
     initialize: function(url, options) {
