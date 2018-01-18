@@ -1,6 +1,6 @@
 <mapml>
   <head>
-    <title>A CBMTILE tile cache in Map Markup Language</title>
+    <title>Queryable Fire Danger Index forecast</title>
     <meta http-equiv="Content-Type" content="text/mapml"/>
     <meta charset="utf-8"/>
     <meta name="projection" content="CBMTILE"/>
