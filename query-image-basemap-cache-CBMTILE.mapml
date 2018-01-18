@@ -6,6 +6,7 @@
     <meta name="projection" content="CBMTILE"/>
     <meta name="zoom" content="min=0,max=17"/>
     <link rel="license" href="https://www.nrcan.gc.ca/earth-sciences/geography/topographic-information/free-data-geogratis/licence/17285" title="Canada Base Map © Natural Resources Canada"/>
+    <link rel="legend" href="http://maps.nofc.cfs.nrcan.gc.ca/geoserver/public/wms?request=GetLegendGraphic&amp;format=image/png&amp;width=20&amp;height=20&amp;layer=fdr_current"/>
   </head>
   <body>
     <extent units="CBMTILE">
