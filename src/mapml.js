@@ -1242,12 +1242,12 @@ M.TemplatedLayer = L.Layer.extend({
               }
               break;
           }
-        } else if (type === "location" && units === "relative") {
-          // <input name="..." type="location" units="relative" axis="x|y"/>
-          if (axis === "x") {
-            queryVarNames.query.x = name;
-          } else if (axis === "y") {
-              queryVarNames.query.y = name;
+        } else if (type === "location" && units === "map") {
+          // <input name="..." type="location" units="map" axis="i|j"/>
+          if (axis === "i") {
+            queryVarNames.query.i = name;
+          } else if (axis === "j") {
+              queryVarNames.query.j = name;
           }
         } else if (type === "hidden") {
            queryVarNames.query[name] = value;
@@ -1297,9 +1297,14 @@ M.TemplatedLayer = L.Layer.extend({
       map.on('click', handleClick, this);
     }
 
-    var popup = L.popup({autoPan: false});
+    var popup = L.popup({autoPan: false, maxHeight: map.getSize().y});
+    // bind the popup to this layer so that when the layer is added/removed
+    // the popup will disappear automagically.
+    this.bindPopup(popup);
     function handleClick(e) {
-      
+      // need to blank out the data from the last popping up to ensure repeated
+      // info from last query doesn't appear in a different location
+      popup.setContent(' ');
       var obj = {},
           template = this._queries[0],
           bounds = e.target.getPixelBounds(),
@@ -1309,8 +1314,8 @@ M.TemplatedLayer = L.Layer.extend({
           tcrs2pcrs = function (c) {
             return crs.transformation.untransform(c,crs.scale(zoom));
           };
-      obj[template.query.x] = e.containerPoint.x.toFixed();
-      obj[template.query.y] = e.containerPoint.y.toFixed();
+      obj[template.query.i] = e.containerPoint.x.toFixed();
+      obj[template.query.j] = e.containerPoint.y.toFixed();
       obj[template.query.width] = map.getSize().x;
       obj[template.query.height] = map.getSize().y;
 
