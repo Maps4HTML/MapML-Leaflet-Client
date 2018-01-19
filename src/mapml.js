@@ -381,10 +381,7 @@ M.MapMLLayer = L.Layer.extend({
         function _get(url, fCallback  ) {
             xhr.onreadystatechange = function () { 
               if(this.readyState === this.DONE) {
-                if(this.status === 200 && this.callback) {
-                  this.callback.apply(this, this.arguments ); 
-                  return;
-                } else if (this.status === 400 || 
+                if (this.status === 400 || 
                     this.status === 404 || 
                     this.status === 500 || 
                     this.status === 406) {
@@ -393,7 +390,6 @@ M.MapMLLayer = L.Layer.extend({
                     xhr.abort();
                 }
               }};
-            xhr.arguments = Array.prototype.slice.call(arguments, 2);
             xhr.onload = fCallback;
             xhr.onerror = function () { 
               layer.error = true;
@@ -405,7 +401,7 @@ M.MapMLLayer = L.Layer.extend({
             xhr.send();
         }
         function _processInitialExtent(content) {
-            var mapml = this.responseXML || content;
+            var mapml = (this.status === 200 && this.responseXML !== null)?this.responseXML : (content.querySelector ? content : null);
             if (mapml) {
                 var serverExtent = mapml.querySelector('extent');
                 if (!serverExtent) {
@@ -459,7 +455,9 @@ M.MapMLLayer = L.Layer.extend({
                   layer._templatedLayer.reset(layer._templateVars);
                 }
                 
-                layer._title = mapml.querySelector('title').textContent;
+                if (mapml.querySelector('title')) {
+                  layer._title = mapml.querySelector('title').textContent;
+                }
                 if (layer._map) {
                     layer._validateExtent();
                     // if the layer is checked in the layer control, force the addition
@@ -1261,6 +1259,8 @@ M.TemplatedLayer = L.Layer.extend({
     var addToMap = this._templates[0].layer._map,
         old_templates = this._templates;
     delete this._queries;
+    this._map.off('click', null, this);
+
     this._templates = templates;
     for (var i=0;i<templates.length;i++) {
       if (templates[i].type === 'tile') {
@@ -1275,9 +1275,7 @@ M.TemplatedLayer = L.Layer.extend({
           this._queries.push(L.extend(templates[i], this._setupQueryVars(templates[i])));
       }
       if (addToMap) {
-        if (this._templates[i].type !== 'query') {
-          this._map.addLayer(this._templates[i].layer);
-        }
+        this.onAdd(this._map);
       }
     }
     for (i=0;i<old_templates.length;i++) {
@@ -1299,7 +1297,9 @@ M.TemplatedLayer = L.Layer.extend({
 
     var popup = L.popup({autoPan: false, maxHeight: map.getSize().y});
     // bind the popup to this layer so that when the layer is added/removed
-    // the popup will disappear automagically.
+    // the popup will disappear automagically. Binding also allows other event
+    // handlers (e.g. onRemove) to clear click event handlers from 'this' without
+    // having access to the specific handler.
     this.bindPopup(popup);
     function handleClick(e) {
       // need to blank out the data from the last popping up to ensure repeated
@@ -1362,10 +1362,9 @@ M.TemplatedLayer = L.Layer.extend({
     for (var i=0;i<this._templates.length;i++) {
       if (this._templates[i].type !== 'query') {
         map.removeLayer(this._templates[i].layer);
-      } else {
-        map.off('click', 'handleClick');
       }
     }
+    map.off('click', null, this);
   }
 });
 M.templatedLayer = function(templates, options) {
