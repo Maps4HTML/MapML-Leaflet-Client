@@ -474,9 +474,7 @@ M.MapMLLayer = L.Layer.extend({
     },
     getEvents: function () {
         return {
-//            zoom: this._reset, 
             moveend: this._onMoveEnd,
-//            zoomend: this._onZoomEnd,
             zoomanim: this._onZoomAnim
         };
     },
@@ -606,7 +604,7 @@ M.MapMLLayer = L.Layer.extend({
             xhr.send();
         }
         function _processInitialExtent(content) {
-            var mapml = (this.status === 200 && this.responseXML !== null)?this.responseXML : (content.querySelector ? content : null);
+            var mapml = this.responseXML || content;
             if (mapml) {
                 var serverExtent = mapml.querySelector('extent');
                 if (!serverExtent) {
