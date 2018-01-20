@@ -476,15 +476,23 @@ M.MapMLLayer = L.Layer.extend({
         return {
 //            zoom: this._reset, 
             moveend: this._onMoveEnd,
-            zoomend: this._onZoomEnd
+//            zoomend: this._onZoomEnd,
+            zoomanim: this._onZoomAnim
         };
     },
-    _onZoomEnd: function() {
-      var mapZoom = this._map.getZoom(),
+    _onZoomAnim: function(e) {
+      var toZoom = e.zoom,
           zoom = this._extent.querySelector("input[type=zoom]"),
           min = parseInt(zoom.getAttribute("min")),
           max = parseInt(zoom.getAttribute("max")),
-          canZoom = (mapZoom < min && this._extent.zoomout) || (mapZoom > max && this._extent.zoomin);
+          canZoom = (toZoom < min && this._extent.zoomout) || (toZoom > max && this._extent.zoomin);
+      if (!this._extent.hasAttribute('action') && !(min <= toZoom && toZoom <= max)){
+        if (this._extent.zoomin && toZoom > max) {
+          this._href = this._extent.zoomin;
+        } else if (this._extent.zoomout && toZoom < min) {
+          this._href = this._extent.zoomout;
+        }
+      }
       if (this._templatedLayer && canZoom ) {
         this._initExtent();
       }
@@ -642,6 +650,8 @@ M.MapMLLayer = L.Layer.extend({
                 var zoomin = mapml.querySelector('link[rel=zoomin]'),
                     zoomout = mapml.querySelector('link[rel=zoomout]'),
                     base = (new URI(mapml.querySelector('base') ? mapml.querySelector('base').getAttribute('href') : null || this.responseURL)).resolve(new URI(this.responseURL));
+                delete layer._extent.zoomin;
+                delete layer._extent.zoomout;
                 if (zoomin) {
                     layer._extent.zoomin = new URI(zoomin.getAttribute('href')).resolve(base).toString();
                 }
@@ -662,20 +672,7 @@ M.MapMLLayer = L.Layer.extend({
                     if (layer._map.hasLayer(layer)) {
                         layer._map.attributionControl.addAttribution(layer.getAttribution());
                     }
-                    layer._map.fire('moveend', layer);
-                    var mapZoom = layer._map.getZoom(),
-                        zoom = layer._extent.querySelector("input[type=zoom]"),
-                        min = parseInt(zoom.getAttribute("min")),
-                        max = parseInt(zoom.getAttribute("max"));
-                    // check that the zoom of the map is in the range of the zoom of the service
-                    if (!layer._extent.hasAttribute('action') && !(min <= mapZoom && mapZoom <= max)){
-                      if (layer._extent.zoomin && mapZoom > max) {
-                        this._href = layer._extent.zoomin;
-                      } else if (layer._extent.zoomout && mapZoom < min) {
-                        this._href = layer._extent.zoomout;
-                      }
-                      layer._map.fire('zoomend', layer);
-                    }
+                    //layer._map.fire('moveend', layer);
                 }
             } else {
                 layer.error = true;
@@ -1389,6 +1386,14 @@ M.TemplatedLayer = L.Layer.extend({
       }
     }
   },
+  getEvents: function() {
+        return {
+            zoomstart: this._onZoomStart
+        };
+  },
+  _onZoomStart: function() {
+      this.closePopup();
+  },
   _setupQueryVars: function(template) {
       // process the inputs associated to template and create an object named
       // query with member properties as follows:
@@ -1453,7 +1458,7 @@ M.TemplatedLayer = L.Layer.extend({
   },
   reset: function (templates) {
     if (!templates) {return;}
-    var addToMap = this._templates[0].layer._map,
+    var addToMap = this._map && this._map.hasLayer(this),
         old_templates = this._templates;
     delete this._queries;
     this._map.off('click', null, this);
