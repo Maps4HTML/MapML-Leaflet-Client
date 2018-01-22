@@ -497,10 +497,7 @@ M.MapMLLayer = L.Layer.extend({
         function _pull(url, fCallback) {
             xhr.onreadystatechange = function () { 
               if(this.readyState === this.DONE) {
-                if(this.status === 200 && this.callback) {
-                  this.callback.apply(this, this.arguments ); 
-                  return;
-                } else if (this.status === 400 || 
+                if (this.status === 400 || 
                     this.status === 404 || 
                     this.status === 500 || 
                     this.status === 406) {
@@ -509,7 +506,6 @@ M.MapMLLayer = L.Layer.extend({
                     xhr.abort();
                 }
               }};
-            xhr.arguments = Array.prototype.slice.call(arguments, 2);
             xhr.onload = fCallback;
             xhr.onerror = function () { 
               console.error(this.statusText); 
