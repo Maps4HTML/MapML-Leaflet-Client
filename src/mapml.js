@@ -497,10 +497,7 @@ M.MapMLLayer = L.Layer.extend({
         function _pull(url, fCallback) {
             xhr.onreadystatechange = function () { 
               if(this.readyState === this.DONE) {
-                if(this.status === 200 && this.callback) {
-                  this.callback.apply(this, this.arguments ); 
-                  return;
-                } else if (this.status === 400 || 
+                if (this.status === 400 || 
                     this.status === 404 || 
                     this.status === 500 || 
                     this.status === 406) {
@@ -509,7 +506,6 @@ M.MapMLLayer = L.Layer.extend({
                     xhr.abort();
                 }
               }};
-            xhr.arguments = Array.prototype.slice.call(arguments, 2);
             xhr.onload = fCallback;
             xhr.onerror = function () { 
               console.error(this.statusText); 
@@ -1174,7 +1170,7 @@ M.TemplatedLayer = L.Layer.extend({
     for (var i=0;i<templates.length;i++) {
       if (templates[i].type === 'tile') {
           this._templates[i].layer = M.templatedTileLayer(templates[i], 
-            L.Util.extend(options, {errorTileUrl: "data:image/gif;base64,R0lGODlhAQABAAAAACw=", zIndex: i, pane: this._container}));
+            L.Util.extend(options, {errorTileUrl: "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==", zIndex: i, pane: this._container}));
       } else if (templates[i].type === 'image') {
           this._templates[i].layer = M.templatedImageLayer(templates[i], L.Util.extend(options, {zIndex: i, pane: this._container}));
       } else if (templates[i].type === 'query') {
@@ -1267,8 +1263,8 @@ M.TemplatedLayer = L.Layer.extend({
     this._templates = templates;
     for (var i=0;i<templates.length;i++) {
       if (templates[i].type === 'tile') {
-          this._templates[i].layer = M.templatedTileLayer(templates[i], this._container,
-            L.Util.extend(this.options, {errorTileUrl: "data:image/gif;base64,R0lGODlhAQABAAAAACw=", zIndex: i, pane: this._container}));
+          this._templates[i].layer = M.templatedTileLayer(templates[i],
+            L.Util.extend(this.options, {errorTileUrl: "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==", zIndex: i, pane: this._container}));
       } else if (templates[i].type === 'image') {
           this._templates[i].layer = M.templatedImageLayer(templates[i], L.Util.extend(this.options, {zIndex: i, pane: this._container}));
       } else if (templates[i].type === 'query') {
