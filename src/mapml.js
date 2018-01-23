@@ -1329,20 +1329,19 @@ M.TemplatedLayer = L.Layer.extend({
       obj[template.query.top] = tcrs2pcrs(bounds.min).y;
       obj[template.query.right] = tcrs2pcrs(bounds.max).x;
       
-      fetch(L.Util.template(template.template, obj)).then(
+      fetch(L.Util.template(template.template, obj),{redirect: 'follow'}).then(
           function(response) {
             if (response.status !== 200) {
               console.log('Looks like there was a problem. Status Code: ' +
                 response.status);
-              return response.text();
             }
 
              //Examine the text in the response
-            response.text().then(function(data) {
-              popup.setContent(data);
-            });
+            return response.text();
           }
-        ).catch(function(err) {
+        ).then(function(data) {
+              popup.setContent(data);
+        }).catch(function(err) {
           console.log('Fetch Error :-S', err);
         });
       
