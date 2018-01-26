@@ -38,6 +38,203 @@
  * publicity pertaining to the work without specific, written prior permission. 
  * Title to copyright in this work will at all times remain with copyright holders.
  */
+;/*
+ * Copyright © 2007 Dominic Mitchell
+ * 
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ * Redistributions of source code must retain the above copyright notice,
+ * this list of conditions and the following disclaimer.
+ * Redistributions in binary form must reproduce the above copyright notice,
+ * this list of conditions and the following disclaimer in the documentation
+ * and/or other materials provided with the distribution.
+ * Neither the name of the Dominic Mitchell nor the names of its contributors
+ * may be used to endorse or promote products derived from this software
+ * without specific prior written permission.
+ * 
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+ * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+ * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*/
+/*
+ * An URI datatype.  Based upon examples in RFC3986.
+ *
+ * TODO %-escaping
+ * TODO split apart authority
+ * TODO split apart query_string (on demand, anyway)
+ *
+ * @(#) $Id$
+ */
+ 
+// Constructor for the URI object.  Parse a string into its components.
+function URI(str) {
+    if (!str) str = "";
+    // Based on the regex in RFC2396 Appendix B.
+    var parser = /^(?:([^:\/?\#]+):)?(?:\/\/([^\/?\#]*))?([^?\#]*)(?:\?([^\#]*))?(?:\#(.*))?/;
+    var result = str.match(parser);
+    this.scheme    = result[1] || null;
+    this.authority = result[2] || null;
+    this.path      = result[3] || null;
+    this.query     = result[4] || null;
+    this.fragment  = result[5] || null;
+}
+
+// Restore the URI to it's stringy glory.
+URI.prototype.toString = function () {
+    var str = "";
+    if (this.scheme) {
+        str += this.scheme + ":";
+    }
+    if (this.authority) {
+        str += "//" + this.authority;
+    }
+    if (this.path) {
+        str += this.path;
+    }
+    if (this.query) {
+        str += "?" + this.query;
+    }
+    if (this.fragment) {
+        str += "#" + this.fragment;
+    }
+    return str;
+};
+
+// Introduce a new scope to define some private helper functions.
+(function () {
+    // RFC3986 §5.2.3 (Merge Paths)
+    function merge(base, rel_path) {
+        var dirname = /^(.*)\//;
+        if (base.authority && !base.path) {
+            return "/" + rel_path;
+        }
+        else {
+            return base.path.match(dirname)[0] + rel_path;
+        }
+    }
+
+    // Match two path segments, where the second is ".." and the first must
+    // not be "..".
+    var DoubleDot = /\/((?!\.\.\/)[^\/]*)\/\.\.\//;
+
+    function remove_dot_segments(path) {
+        if (!path) return "";
+        // Remove any single dots
+        var newpath = path.replace(/\/\.\//g, '/');
+        // Remove any trailing single dots.
+        newpath = newpath.replace(/\/\.$/, '/');
+        // Remove any double dots and the path previous.  NB: We can't use
+        // the "g", modifier because we are changing the string that we're
+        // matching over.
+        while (newpath.match(DoubleDot)) {
+            newpath = newpath.replace(DoubleDot, '/');
+        }
+        // Remove any trailing double dots.
+        newpath = newpath.replace(/\/([^\/]*)\/\.\.$/, '/');
+        // If there are any remaining double dot bits, then they're wrong
+        // and must be nuked.  Again, we can't use the g modifier.
+        while (newpath.match(/\/\.\.\//)) {
+            newpath = newpath.replace(/\/\.\.\//, '/');
+        }
+        return newpath;
+    }
+
+    // RFC3986 §5.2.2. Transform References;
+    URI.prototype.resolve = function (base) {
+        var target = new URI();
+        if (this.scheme) {
+            target.scheme    = this.scheme;
+            target.authority = this.authority;
+            target.path      = remove_dot_segments(this.path);
+            target.query     = this.query;
+        }
+        else {
+            if (this.authority) {
+                target.authority = this.authority;
+                target.path      = remove_dot_segments(this.path);
+                target.query     = this.query;
+            }        
+            else {
+                // XXX Original spec says "if defined and empty"…;
+                if (!this.path) {
+                    target.path = base.path;
+                    if (this.query) {
+                        target.query = this.query;
+                    }
+                    else {
+                        target.query = base.query;
+                    }
+                }
+                else {
+                    if (this.path.charAt(0) === '/') {
+                        target.path = remove_dot_segments(this.path);
+                    } else {
+                        target.path = merge(base, this.path);
+                        target.path = remove_dot_segments(target.path);
+                    }
+                    target.query = this.query;
+                }
+                target.authority = base.authority;
+            }
+            target.scheme = base.scheme;
+        }
+
+        target.fragment = this.fragment;
+
+        return target;
+    };
+})();
+;/* 
+ * Copyright 2015-2016 Canada Centre for Mapping and Earth Observation, 
+ * Earth Sciences Sector, Natural Resources Canada.
+ * 
+ * License
+ * 
+ * By obtaining and/or copying this work, you (the licensee) agree that you have 
+ * read, understood, and will comply with the following terms and conditions.
+ * 
+ * Permission to copy, modify, and distribute this work, with or without 
+ * modification, for any purpose and without fee or royalty is hereby granted, 
+ * provided that you include the following on ALL copies of the work or portions 
+ * thereof, including modifications:
+ * 
+ * The full text of this NOTICE in a location viewable to users of the 
+ * redistributed or derivative work.
+ * 
+ * Any pre-existing intellectual property disclaimers, notices, or terms and 
+ * conditions. If none exist, the W3C Software and Document Short Notice should 
+ * be included.
+ * 
+ * Notice of any changes or modifications, through a copyright statement on the 
+ * new code or document such as "This software or document includes material 
+ * copied from or derived from [title and URI of the W3C document]. 
+ * Copyright © [YEAR] W3C® (MIT, ERCIM, Keio, Beihang)."
+ * 
+ * Disclaimers
+ * 
+ * THIS WORK IS PROVIDED "AS IS," AND COPYRIGHT HOLDERS MAKE NO REPRESENTATIONS 
+ * OR WARRANTIES, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO, WARRANTIES OF 
+ * MERCHANTABILITY OR FITNESS FOR ANY PARTICULAR PURPOSE OR THAT THE USE OF THE 
+ * SOFTWARE OR DOCUMENT WILL NOT INFRINGE ANY THIRD PARTY PATENTS, COPYRIGHTS, 
+ * TRADEMARKS OR OTHER RIGHTS.
+ * COPYRIGHT HOLDERS WILL NOT BE LIABLE FOR ANY DIRECT, INDIRECT, SPECIAL OR 
+ * CONSEQUENTIAL DAMAGES ARISING OUT OF ANY USE OF THE SOFTWARE OR DOCUMENT.
+ * 
+ * The name and trademarks of copyright holders may NOT be used in advertising or 
+ * publicity pertaining to the work without specific, written prior permission. 
+ * Title to copyright in this work will at all times remain with copyright holders.
+ */
 /* global L, Node */
 (function (window, document, undefined) {
   
@@ -1386,15 +1583,13 @@ M.TemplatedLayer = L.Layer.extend({
           tcrs2pcrs = function (c) {
             return crs.transformation.untransform(c,crs.scale(zoom));
           };
-          
-      // the containerPoint is relative to the map container, with 0,0 at the upper left      obj[template.query.i] = e.containerPoint.x.toFixed();
+      obj[template.query.i] = e.containerPoint.x.toFixed();
       obj[template.query.j] = e.containerPoint.y.toFixed();
-
-      // whereas the layerPoint is calculated relative to the origin plus / minus any
-      // pan movements so is equal to containerPoint at first before any pans, but
-      // changes as the map pans. 
+      
+      // the containerPoint is relative to the map container, with 0,0 at the upper left
       obj[template.query.x] = map.getPixelOrigin().add(e.layerPoint).x.toFixed();
       obj[template.query.y] = map.getPixelOrigin().add(e.layerPoint).y.toFixed();
+      // the origin stays where it is as the map pans, the layerPoint is relative to it.
       obj[template.query.easting] =  tcrs2pcrs(map.getPixelOrigin().add(e.layerPoint)).x;
       obj[template.query.northing] = tcrs2pcrs(map.getPixelOrigin().add(e.layerPoint)).y;
       obj[template.query.zoom] = zoom;

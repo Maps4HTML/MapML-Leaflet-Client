@@ -16,5 +16,9 @@
 .leaflet-image-loaded {
         visibility: inherit;
         }
+        
+.mapml-popup-overflow {
+        overflow: auto;
+        }
 
 
