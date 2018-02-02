@@ -1583,13 +1583,16 @@ M.TemplatedLayer = L.Layer.extend({
           tcrs2pcrs = function (c) {
             return crs.transformation.untransform(c,crs.scale(zoom));
           };
+          
+      // the containerPoint is relative to the map container, with 0,0 at the upper left      
       obj[template.query.i] = e.containerPoint.x.toFixed();
       obj[template.query.j] = e.containerPoint.y.toFixed();
-      
-      // the containerPoint is relative to the map container, with 0,0 at the upper left
+
+      // whereas the layerPoint is calculated relative to the origin plus / minus any
+      // pan movements so is equal to containerPoint at first before any pans, but
+      // changes as the map pans. 
       obj[template.query.x] = map.getPixelOrigin().add(e.layerPoint).x.toFixed();
       obj[template.query.y] = map.getPixelOrigin().add(e.layerPoint).y.toFixed();
-      // the origin stays where it is as the map pans, the layerPoint is relative to it.
       obj[template.query.easting] =  tcrs2pcrs(map.getPixelOrigin().add(e.layerPoint)).x;
       obj[template.query.northing] = tcrs2pcrs(map.getPixelOrigin().add(e.layerPoint)).y;
       obj[template.query.zoom] = zoom;
