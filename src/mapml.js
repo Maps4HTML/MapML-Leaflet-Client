@@ -1387,7 +1387,8 @@ M.TemplatedLayer = L.Layer.extend({
             return crs.transformation.untransform(c,crs.scale(zoom));
           };
           
-      // the containerPoint is relative to the map container, with 0,0 at the upper left      obj[template.query.i] = e.containerPoint.x.toFixed();
+      // the containerPoint is relative to the map container, with 0,0 at the upper left      
+      obj[template.query.i] = e.containerPoint.x.toFixed();
       obj[template.query.j] = e.containerPoint.y.toFixed();
 
       // whereas the layerPoint is calculated relative to the origin plus / minus any
