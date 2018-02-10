@@ -1,0 +1,28 @@
+<mapml>
+  <head>
+    <title>An OSMTILE tile cache in Map Markup Language</title>
+    <meta http-equiv="Content-Type" content="text/mapml"/>
+    <meta charset="utf-8"/>
+    <meta name="projection" content="OSMTILE"/>
+    <link rel="license" href="https://www.nrcan.gc.ca/earth-sciences/geography/topographic-information/free-data-geogratis/licence/17285" title="Canada Base Map © Natural Resources Canada"/>
+  </head>
+  <body>
+    <extent units="OSMTILE">
+      <input name="z" type="zoom" value="0" min="0" max="18"/>
+      <input name="x" type="location" units="tilematrix" axis="column"/>
+      <input name="y" type="location" units="tilematrix" axis="row"/>
+      <!-- below input is a hack to workaround the fact that the {s} variable is 
+           quasi-hardcoded in Leaflet.  The template won't be used if there
+           aren't matching inputs and variable references. So the client needs
+           to supply an input@name=s if they want to use the hardcoding, or provide
+           a literal value of host name if necessary for the host.domain.tld in the template -->
+      <input name="s" type="hidden" value="abc"/>
+      <input name="xmx" type="xmin" min="0.0" max="256.0"/>
+      <input name="ymn" type="ymin" min="0.0" max="256.0"/>
+      <input name="xmx" type="xmax" min="0.0" max="256.0"/>
+      <input name="ymx" type="ymax" min="0.0" max="256.0"/>
+      <input name="projection" type="projection" value="OSMTILE"/>
+      <template type="tile" tref="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"/>
+    </extent>
+  </body>
+</mapml>

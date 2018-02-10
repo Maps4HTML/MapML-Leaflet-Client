@@ -1,0 +1,24 @@
+<mapml>
+    <head>
+        <title>Arctic Ocean Basemap MapML Tile Cache</title>
+        <meta http-equiv="Content-Type" content="text/mapml"/>
+        <meta charset="utf-8"/>
+        <meta name="projection" content="APSTILE"/>
+        <link rel="license" href="https://www.esri.com/legal/software-license"
+            title="Sources: Esri, GEBCO, NOAA, National Geographic, DeLorme, HERE, Geonames.org, and other contributors"
+        />
+    </head>
+    <body>
+        <extent units="APSTILE">
+            <input name="xmn" type="xmin" min="0.0" max="2048.0"/>
+            <input name="ymn" type="ymin" min="0.0" max="2048.0"/>
+            <input name="xmx" type="xmax" min="0.0" max="2048.0"/>
+            <input name="ymx" type="ymax" min="0.0" max="2048.0"/>
+            <input name="z" type="zoom" value="3" min="0" max="10"/>
+            <input name="projection" type="projection" value="APSTILE"/>
+            <input name="y" type="location" units="tilematrix" axis="row"/>
+            <input name="x" type="location" units="tilematrix" axis="column"/>
+            <template type="tile" tref="https://server.arcgisonline.com/arcgis/rest/services/Polar/Arctic_Ocean_Base/MapServer/tile/{z}/{y}/{x}?m4h=t"/>
+        </extent>
+    </body>
+</mapml>

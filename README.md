@@ -1,6 +1,6 @@
-# MapML-Leaflet-Client
+# MapML-Leaflet-Plugin
 MapML JavaScript client for Leaflet.js
 
-The MapML client library is based on Leaflet 1.0.0-b1, and supports adds the concept of a MapML layer, is referred to by a simple URL.
+The MapML client library depends on MapML-Leaflet, and adds the concept of a MapML layer, which is referred to by a simple URL.
 
-[Demo](http://maps4html.github.io/MapML-Leaflet-Client/)
+[Demo](http://maps4html.github.io/MapML-Leaflet-Plugin/)
