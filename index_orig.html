@@ -10,14 +10,11 @@
     <script src="bower_components/proj4leaflet/src/proj4leaflet.js"></script>
     <script src="src/mapml.js"></script>
     <script src="src/URI.js"></script>
-<!--    <script src="bower_components/webcomponentsjs/webcomponents-lite.min.js"></script>
-    <link rel="import" href="bower_components/polymer/polymer.html">-->
   </head>
   <body>
     <h3>MapML Leaflet plugin</h3>
     <div id="osmtile-map" style="height: 300px;width: 40%;"></div>
     <script>
-//        addEventListener('WebComponentsReady', function() {
                      cbmt =  M.mapMLLayer('https://geogratis.gc.ca/mapml/en/osmtile/cbmt'),
           cbmtMap =    L.map('osmtile-map',{
                   center: [45.398043,-75.70683],
@@ -32,7 +29,6 @@
           cbmtLayerControl = M.mapMlLayerControl({'Canada Base Map':cbmt},{"collapsed":true}).addTo(cbmtMap);
           cbmtMap.attributionControl.setPrefix('<a href="https://www.w3.org/community/maps4html/" title="W3C Maps4HTML Community Group">MapML</a>');
           marker = L.marker([45.398043,-75.70683],{draggable:true}).addTo(cbmtMap);
-//        });
     </script>
   </body>
 </html>
