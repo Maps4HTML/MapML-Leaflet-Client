@@ -2149,7 +2149,8 @@ M.MapMLLayerControl = L.Control.Layers.extend({
         
         // the _layers array contains objects like {layer: layer, name: "name", overlay: true}
         // the array index is the id of the layer returned by L.stamp(layer) which I guess is a unique hash
-        this._layers = {};
+        this._layerControlInputs = [];
+        this._layers = [];
         this._lastZIndex = 0;
         this._handlingClick = false;
 
@@ -2168,7 +2169,7 @@ M.MapMLLayerControl = L.Control.Layers.extend({
         map.off('moveend', this._validateExtents, this);
         // remove layer-registerd event handlers so that if the control is not
         // on the map it does not generate layer events
-        for (var i in this._layers) {
+        for (var i = 0; i < this._layers.length; i++) {
           this._layers[i].layer.off('add remove', this._onLayerChange, this);
           this._layers[i].layer.off('extentload', this._validateExtents, this);
         }
@@ -2178,7 +2179,7 @@ M.MapMLLayerControl = L.Control.Layers.extend({
         var zoom = this._map.getZoom(),
             bounds = this._map.getPixelBounds(),
             zoomBounds, i, obj, visible, projectionMatches;
-        for (i in this._layers) {
+        for (var i = 0; i < this._layers.length; i++) {
             obj = this._layers[i];
             if (obj.layer._extent || obj.layer.error) {
 
@@ -2230,6 +2231,7 @@ M.MapMLLayerControl = L.Control.Layers.extend({
         input.defaultChecked = checked;
         obj.input = input;
 
+        this._layerControlInputs.push(input);
         input.layerId = L.stamp(obj.layer);
 
         L.DomEvent.on(input, 'click', this._onInputClick, this);
