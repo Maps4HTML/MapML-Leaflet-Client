@@ -289,12 +289,20 @@ M.MapMLLayer = L.Layer.extend({
           canZoom = (toZoom < min && this._extent.zoomout) || (toZoom > max && this._extent.zoomin);
       if (!this._extent.hasAttribute('action') && !(min <= toZoom && toZoom <= max)){
         if (this._extent.zoomin && toZoom > max) {
+          // this._href is the 'original' url from which this layer came
+          // since we are following a zoom link we will be getting a new
+          // layer almost, resetting child content as appropriate
           this._href = this._extent.zoomin;
+          // this.href is the "public" property. When a dynamic layer is
+          // accessed, this value changes with every new extent received
+          this.href = this._extent.zoomin;
         } else if (this._extent.zoomout && toZoom < min) {
           this._href = this._extent.zoomout;
+          this.href = this._extent.zoomout;
         }
       }
       if (this._templatedLayer && canZoom ) {
+        // get the new extent
         this._initExtent();
       }
     },
@@ -497,10 +505,7 @@ M.MapMLLayer = L.Layer.extend({
         function _pull(url, fCallback) {
             xhr.onreadystatechange = function () { 
               if(this.readyState === this.DONE) {
-                if(this.status === 200 && this.callback) {
-                  this.callback.apply(this, this.arguments ); 
-                  return;
-                } else if (this.status === 400 || 
+                if (this.status === 400 || 
                     this.status === 404 || 
                     this.status === 500 || 
                     this.status === 406) {
@@ -509,7 +514,6 @@ M.MapMLLayer = L.Layer.extend({
                     xhr.abort();
                 }
               }};
-            xhr.arguments = Array.prototype.slice.call(arguments, 2);
             xhr.onload = fCallback;
             xhr.onerror = function () { 
               console.error(this.statusText); 
@@ -528,9 +532,48 @@ M.MapMLLayer = L.Layer.extend({
                 var serverExtent = mapml.querySelector('extent');
                 if (!serverExtent) {
                     serverExtent = layer._synthesizeExtent(mapml);
+                } else if (!serverExtent.hasAttribute("action") && serverExtent.querySelector('template') && serverExtent.hasAttribute("units") && serverExtent.getAttribute("units") !== "WGS84") {
+                  layer._templateVars = [];
+                  // set up the URL template and associated inputs (which yield variable values when processed)
+                  var tlist = serverExtent.querySelectorAll('template'),
+                      varNamesRe = (new RegExp('(?:\{)(.*?)(?:\})','g'));
+                  for (i=0;i< tlist.length;i++) {
+                    var t = tlist[i],
+                        template = t.getAttribute('tref'), v,
+                        vcount=template.match(varNamesRe),
+                        ttype = (!t.hasAttribute('type') || t.getAttribute('type').toLowerCase() === 'tile') ? 'tile' : t.getAttribute('type').toLowerCase(),
+                        inputs = [];
+                    while ((v = varNamesRe.exec(template)) !== null) {
+                      var varName = v[1],
+                      inp = serverExtent.querySelector('input[name='+varName+']');
+                      if (inp) {
+                        inputs.push(inp);
+                      } else {
+                        console.log('input with name='+varName+' not found for template variable of same name');
+                        // no match found, template won't be used
+                        break;
+                      }
+                    }
+                    if (template && vcount.length === inputs.length) {
+                      // template has a matching input for every variable reference {varref}
+                      layer._templateVars.push({template:template, type: ttype, values: inputs});
+                    }
+                  }
                 }
-                  layer._extent = serverExtent;
-                  layer._parseLicenseAndLegend(mapml, layer);
+                layer._extent = serverExtent;
+                layer._parseLicenseAndLegend(mapml, layer);
+                var zoomin = mapml.querySelector('link[rel=zoomin]'),
+                    zoomout = mapml.querySelector('link[rel=zoomout]'),
+                    base = (new URI(mapml.querySelector('base') ? mapml.querySelector('base').getAttribute('href') : null || this.responseURL)).resolve(new URI(this.responseURL));
+                delete layer._extent.zoomin;
+                delete layer._extent.zoomout;
+                if (zoomin) {
+                    layer._extent.zoomin = new URI(zoomin.getAttribute('href')).resolve(base).toString();
+                }
+                if (zoomout) {
+                    layer._extent.zoomout = new URI(zoomout.getAttribute('href')).resolve(base).toString();
+                }
+                
               }
               if (mapml.querySelector('feature')) {
                   layer._mapmlvectors.addData(mapml);
@@ -867,8 +910,12 @@ M.MapMLLayer = L.Layer.extend({
         } else if (!action){
           if (extent.zoomin && mapZoom > max) {
             this._href = extent.zoomin;
+            this.href = extent.zoomin;
+            return this.href;
           } else if (extent.zoomout && mapZoom < min) {
             this._href = extent.zoomout;
+            this.href = extent.zoomout;
+            return this.href;
           }
         } else {
           return null;
@@ -1174,7 +1221,7 @@ M.TemplatedLayer = L.Layer.extend({
     for (var i=0;i<templates.length;i++) {
       if (templates[i].type === 'tile') {
           this._templates[i].layer = M.templatedTileLayer(templates[i], 
-            L.Util.extend(options, {errorTileUrl: "data:image/gif;base64,R0lGODlhAQABAAAAACw=", zIndex: i, pane: this._container}));
+            L.Util.extend(options, {errorTileUrl: "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==", zIndex: i, pane: this._container}));
       } else if (templates[i].type === 'image') {
           this._templates[i].layer = M.templatedImageLayer(templates[i], L.Util.extend(options, {zIndex: i, pane: this._container}));
       } else if (templates[i].type === 'query') {
@@ -1204,8 +1251,11 @@ M.TemplatedLayer = L.Layer.extend({
       //  right: 'rightvarname', 
       //  top: 'topvarname', 
       //  bottom: 'bottomvarname'
-      //  x: 'xvarname'
-      //  y: 'yvarname'}
+      //  i: 'ivarname'
+      //  j: 'jvarname'}
+      //  x: 'xvarname' x being the tcrs x axis
+      //  y: 'yvarname' y being the tcrs y axis
+      //  z: 'zvarname' zoom
 
       var queryVarNames = {query:{}},
           inputs = template.values;
@@ -1231,6 +1281,8 @@ M.TemplatedLayer = L.Layer.extend({
                   } else if (position.match(/.*?-right/i)) {
                     queryVarNames.query.right = name;
                   }
+              } else {
+                  queryVarNames.query.easting = name;
               }
               break;
             case ('northing'):
@@ -1240,6 +1292,8 @@ M.TemplatedLayer = L.Layer.extend({
                 } else if (position.match(/bottom-.*?/i)) {
                   queryVarNames.query.bottom = name;
                 }
+              } else {
+                queryVarNames.query.northing = name;
               }
               break;
           }
@@ -1248,8 +1302,17 @@ M.TemplatedLayer = L.Layer.extend({
           if (axis === "i") {
             queryVarNames.query.i = name;
           } else if (axis === "j") {
-              queryVarNames.query.j = name;
+            queryVarNames.query.j = name;
           }
+        } else if (type === "location" && units === "tcrs") {
+          if (axis === "x") {
+            queryVarNames.query.x = name;
+          } else if (axis === "y") {
+            queryVarNames.query.y = name;
+          }
+        } else if (type === "zoom") {
+          //<input name="..." type="zoom" value="0" min="0" max="17"/>
+           queryVarNames.query.zoom = name;
         } else if (type === "hidden") {
            queryVarNames.query[name] = value;
            // <input name="foo" type="hidden" value="bar"/>
@@ -1267,8 +1330,8 @@ M.TemplatedLayer = L.Layer.extend({
     this._templates = templates;
     for (var i=0;i<templates.length;i++) {
       if (templates[i].type === 'tile') {
-          this._templates[i].layer = M.templatedTileLayer(templates[i], this._container,
-            L.Util.extend(this.options, {errorTileUrl: "data:image/gif;base64,R0lGODlhAQABAAAAACw=", zIndex: i, pane: this._container}));
+          this._templates[i].layer = M.templatedTileLayer(templates[i],
+            L.Util.extend(this.options, {errorTileUrl: "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==", zIndex: i, pane: this._container}));
       } else if (templates[i].type === 'image') {
           this._templates[i].layer = M.templatedImageLayer(templates[i], L.Util.extend(this.options, {zIndex: i, pane: this._container}));
       } else if (templates[i].type === 'query') {
@@ -1298,7 +1361,13 @@ M.TemplatedLayer = L.Layer.extend({
       map.on('click', handleClick, this);
     }
 
-    var popup = L.popup({autoPan: false, maxHeight: map.getSize().y});
+    // this needs a custom className as well as a selector in mapml.css in order
+    // that the content of the popup does not overflow onto the map, but instead
+    // gets a scrollbar.  This is particularly so when the content returned is
+    // json, but also html can do this too.  There seems to be a max width
+    // that a popup will take, after which if your content is too wide you will
+    // have to do something like this.
+    var popup = L.popup({autoPan: false, maxHeight: map.getSize().y - 20, className: "mapml-popup-overflow"});
     // bind the popup to this layer so that when the layer is added/removed
     // the popup will disappear automagically. Binding also allows other event
     // handlers (e.g. onRemove) to clear click event handlers from 'this' without
@@ -1317,8 +1386,19 @@ M.TemplatedLayer = L.Layer.extend({
           tcrs2pcrs = function (c) {
             return crs.transformation.untransform(c,crs.scale(zoom));
           };
+          
+      // the containerPoint is relative to the map container, with 0,0 at the upper left      
       obj[template.query.i] = e.containerPoint.x.toFixed();
       obj[template.query.j] = e.containerPoint.y.toFixed();
+
+      // whereas the layerPoint is calculated relative to the origin plus / minus any
+      // pan movements so is equal to containerPoint at first before any pans, but
+      // changes as the map pans. 
+      obj[template.query.x] = map.getPixelOrigin().add(e.layerPoint).x.toFixed();
+      obj[template.query.y] = map.getPixelOrigin().add(e.layerPoint).y.toFixed();
+      obj[template.query.easting] =  tcrs2pcrs(map.getPixelOrigin().add(e.layerPoint)).x;
+      obj[template.query.northing] = tcrs2pcrs(map.getPixelOrigin().add(e.layerPoint)).y;
+      obj[template.query.zoom] = zoom;
       obj[template.query.width] = map.getSize().x;
       obj[template.query.height] = map.getSize().y;
 
@@ -1329,20 +1409,19 @@ M.TemplatedLayer = L.Layer.extend({
       obj[template.query.top] = tcrs2pcrs(bounds.min).y;
       obj[template.query.right] = tcrs2pcrs(bounds.max).x;
       
-      fetch(L.Util.template(template.template, obj)).then(
+      fetch(L.Util.template(template.template, obj),{redirect: 'follow'}).then(
           function(response) {
             if (response.status !== 200) {
               console.log('Looks like there was a problem. Status Code: ' +
                 response.status);
-              return response.text();
             }
 
              //Examine the text in the response
-            response.text().then(function(data) {
-              popup.setContent(data);
-            });
+            return response.text();
           }
-        ).catch(function(err) {
+        ).then(function(data) {
+              popup.setContent(data);
+        }).catch(function(err) {
           console.log('Fetch Error :-S', err);
         });
       
