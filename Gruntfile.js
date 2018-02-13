@@ -29,7 +29,9 @@ module.exports = function(grunt) {
           console: true,
           module: true,
           document: true
-        }
+        },
+        // ensure that jshint keeps processing after an error
+        force: true
       }
     },
     watch: {
@@ -39,8 +41,8 @@ module.exports = function(grunt) {
     copy : {
     	main : {
     		expand : true,
-    		cwd: 'src/demo',
-    	    src: '*',
+    		cwd: 'src',
+    	    src: ['./**/*.css'],
     	    dest: 'dist'
     	}
     },
