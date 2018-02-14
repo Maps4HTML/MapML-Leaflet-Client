@@ -3,18 +3,21 @@
   <head>
     <meta charset="utf-8">
     <title>MapML Leaflet plugin</title>
-    <link rel="stylesheet" href="bower_components/leaflet/dist/leaflet.css" />
+    <link rel="stylesheet" href="bower_components/polymer-leaflet/leaflet.css" />
     <link rel="stylesheet" href="src/mapml.css" />
-    <script src="bower_components/leaflet/dist/leaflet-src.js"></script>
+    <script src="bower_components/polymer-leaflet/leaflet-src.js"></script>
     <script src="bower_components/proj4/dist/proj4.js"></script> 
     <script src="bower_components/proj4leaflet/src/proj4leaflet.js"></script>
     <script src="src/mapml.js"></script>
     <script src="src/URI.js"></script>
+    <script src="bower_components/webcomponentsjs/webcomponents-lite.min.js"></script>
+    <link rel="import" href="bower_components/polymer/polymer.html">
   </head>
   <body>
     <h3>MapML Leaflet plugin</h3>
     <div id="apstile-map" style="height: 300px;width: 40%;"></div>
     <script>
+        addEventListener('WebComponentsReady', function() {
                      aps =  M.mapMLLayer('tile-cache-APSTILE.mapml'),
           apsMap =    L.map('apstile-map',{
                   center: [90,0],
@@ -38,7 +41,8 @@
                 }),
           apsLayerControl = M.mapMlLayerControl({'Arctic Ocean Base Map':aps},{"collapsed":true}).addTo(apsMap);
           apsMap.attributionControl.setPrefix('<a href="https://www.w3.org/community/maps4html/" title="W3C Maps4HTML Community Group">MapML</a>');
-          marker = L.marker([90,0],{draggable:true}).addTo(apsMap);
+          marker = L.marker([45.398043,-75.70683],{draggable:true}).addTo(apsMap);
+        });
     </script>
   </body>
 </html>
