@@ -18,6 +18,7 @@ module.exports = function(grunt) {
       dist: {
         files: {
           'dist/mapml.min.js': ['<%= concat.dist.dest %>']
+         /* ,'dist/leaflet.js': ['bower_components/polymer-leaflet/leaflet-src.js'] */
         }
       }
     },
