@@ -399,6 +399,27 @@ M.MapMLLayer = L.Layer.extend({
             this._container.style.zIndex = this.options.zIndex;
         }
     },
+    _detectIconPath: function (container) {
+      // this relies on the CSS style leaflet-default-icon-path containing a 
+      // relative url() that leads to a valid icon file.  Since that depends on
+      // how all of this stuff is deployed (i.e. custom element or as leaflet-plugin)
+      // also, because we're using 'shady DOM' api, the container must be 
+      // a shady dom container, because the custom element tags it with added
+      // style-scope ... and related classes.
+     var el = L.DomUtil.create('div',  'leaflet-default-icon-path', container);
+     var path = L.DomUtil.getStyle(el, 'background-image') ||
+                L.DomUtil.getStyle(el, 'backgroundImage');	// IE8
+
+     Polymer.dom(container).removeChild(el);
+
+     if (path === null || path.indexOf('url') !== 0) {
+      path = '';
+     } else {
+      path = path.replace(/^url\(["']?/, '').replace(/marker-icon\.png["']?\)$/, '');
+     }
+
+     return path;
+    },
     onAdd: function (map) {
         this._map = map;
         if (!this._mapmlvectors) {
@@ -410,6 +431,7 @@ M.MapMLLayer = L.Layer.extend({
               // it will append its own container for rendering into
               pane: this._container,
               opacity: this.options.opacity,
+              imagePath: this._detectIconPath(this._map.getContainer()),
               onEachFeature: function(feature, layer) {
                 var type;
                 if (layer instanceof L.Polygon) {
@@ -2208,10 +2230,10 @@ M.MapMLFeatures = L.FeatureGroup.extend({
 		}
 	}
 });
-M.MapMLFeatures.addInitHook(function() {
-  // this function requires that there be a document body, weirdly
-  this.options.imagePath = L.Icon.Default.prototype._detectIconPath();
-});
+//M.MapMLFeatures.addInitHook(function() {
+//  // this function requires that there be a document body, weirdly
+//  this.options.imagePath = L.Icon.Default.prototype._detectIconPath();
+//});
 L.extend(M.MapMLFeatures, {
 	geometryToLayer: function (mapml, pointToLayer, coordsToLatLng, vectorOptions) {
 		var geometry = mapml.tagName.toUpperCase() === 'FEATURE' ? mapml.getElementsByTagName('geometry')[0] : mapml,
