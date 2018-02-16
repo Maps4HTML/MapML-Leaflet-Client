@@ -399,7 +399,7 @@ M.MapMLLayer = L.Layer.extend({
             this._container.style.zIndex = this.options.zIndex;
         }
     },
-    _detectIconPath: function (container) {
+    _detectImagePath: function (container) {
       // this relies on the CSS style leaflet-default-icon-path containing a 
       // relative url() that leads to a valid icon file.  Since that depends on
       // how all of this stuff is deployed (i.e. custom element or as leaflet-plugin)
@@ -431,25 +431,25 @@ M.MapMLLayer = L.Layer.extend({
               // it will append its own container for rendering into
               pane: this._container,
               opacity: this.options.opacity,
-              imagePath: this._detectIconPath(this._map.getContainer()),
-              onEachFeature: function(feature, layer) {
+              imagePath: this._detectImagePath(this._map.getContainer()),
+              onEachFeature: function(properties, geometry) {
                 var type;
-                if (layer instanceof L.Polygon) {
+                if (geometry instanceof L.Polygon) {
                   type = "Polygon";
-                } else if (layer instanceof L.Polyline) {
+                } else if (geometry instanceof L.Polyline) {
                   type = "LineString";
-                } else if (layer instanceof L.Marker) {
+                } else if (geometry instanceof L.Marker) {
                   type = "Point";
                 } else {
                   type = "Unknown";
                 }
                 var popupContent = "<p>Type: " +  type + "</p>";
-                for (var i=0;i<feature.childNodes.length;i++) {
-                  if (feature.childNodes[i].nodeType === Node.ELEMENT_NODE) {
-                      popupContent += feature.childNodes[i].tagName+ " = " + feature.childNodes[i].textContent +"<br>";
+                for (var i=0;i<properties.childNodes.length;i++) {
+                  if (properties.childNodes[i].nodeType === Node.ELEMENT_NODE) {
+                      popupContent += properties.childNodes[i].tagName+ " = " + properties.childNodes[i].textContent +"<br>";
                   }
                 }
-                layer.bindPopup(popupContent, {autoPan:false});
+                geometry.bindPopup(popupContent, {autoPan:false});
               }
             });
         }
@@ -2143,7 +2143,9 @@ M.MapMLFeatures = L.FeatureGroup.extend({
     
       L.setOptions(this, options);
       this._container = L.DomUtil.create('div','leaflet-layer', this.options.pane);
-      L.DomUtil.addClass(this._container,'mapml-vector-container');
+      // must have leaflet-pane class because of new/changed rule in leaflet.css
+      // info: https://github.com/Leaflet/Leaflet/pull/4597 
+      L.DomUtil.addClass(this._container,'leaflet-pane mapml-vector-container');
       L.setOptions(this.options.renderer, {pane: this._container});
 
       this._layers = {};
@@ -2192,14 +2194,14 @@ M.MapMLFeatures = L.FeatureGroup.extend({
 		if (options.filter && !options.filter(mapml)) { return; }
 
 		var layer = M.MapMLFeatures.geometryToLayer(mapml, options.pointToLayer, options.coordsToLatLng, options);
-		layer.feature = mapml.getElementsByTagName('properties')[0];
+		layer.properties = mapml.getElementsByTagName('properties')[0];
                 
                 layer.options.className = mapml.getAttribute('class') ? mapml.getAttribute('class') : null;
 		layer.defaultOptions = layer.options;
 		this.resetStyle(layer);
 
 		if (options.onEachFeature) {
-			options.onEachFeature(layer.feature, layer);
+			options.onEachFeature(layer.properties, layer);
 		}
 
 		return this.addLayer(layer);
@@ -2230,10 +2232,6 @@ M.MapMLFeatures = L.FeatureGroup.extend({
 		}
 	}
 });
-//M.MapMLFeatures.addInitHook(function() {
-//  // this function requires that there be a document body, weirdly
-//  this.options.imagePath = L.Icon.Default.prototype._detectIconPath();
-//});
 L.extend(M.MapMLFeatures, {
 	geometryToLayer: function (mapml, pointToLayer, coordsToLatLng, vectorOptions) {
 		var geometry = mapml.tagName.toUpperCase() === 'FEATURE' ? mapml.getElementsByTagName('geometry')[0] : mapml,
