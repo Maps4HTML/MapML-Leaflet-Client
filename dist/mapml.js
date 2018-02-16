@@ -2394,6 +2394,20 @@ M.MapMLLayerControl = L.Control.Layers.extend({
           this._layers[i].layer.off('extentload', this._validateExtents, this);
         }
     },
+    addOrUpdateOverlay: function (layer, name) {
+     var alreadyThere = false;
+     for (var i=0;i<this._layers.length;i++) {
+       if (this._layers[i].layer === layer) {
+         alreadyThere = true;
+         this._layers[i].name = name;
+         break;
+       }
+     }
+     if (!alreadyThere) {
+       this._addLayer(layer, name, true);
+     }
+     return (this._map) ? this._update() : this;
+    },
     _validateExtents: function (e) {
         // get the bounds of the map in Tiled CRS pixel units
         var zoom = this._map.getZoom(),
@@ -2459,8 +2473,11 @@ M.MapMLLayerControl = L.Control.Layers.extend({
         var name = document.createElement('span');
         
         this._setLegendLink(obj, name);
-        Polymer.dom(label).appendChild(input);
-        Polymer.dom(label).appendChild(name);
+        var holder = document.createElement('div');
+        
+        Polymer.dom(label).appendChild(holder);
+        Polymer.dom(holder).appendChild(input);
+        Polymer.dom(holder).appendChild(name);
 
         var container = this._overlaysList;
         Polymer.dom(container).appendChild(label);
