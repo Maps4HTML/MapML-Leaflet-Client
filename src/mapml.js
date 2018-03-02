@@ -202,6 +202,14 @@ M.MapMLLayer = L.Layer.extend({
             this._container.style.zIndex = this.options.zIndex;
         }
     },
+    _changeOpacity: function(e) {
+      if (e && e.target && e.target.value >=0 && e.target.value <= 1.0) {
+        this.changeOpacity(e.target.value);
+      }
+    },
+    changeOpacity: function(opacity) {
+        this._container.style.opacity = opacity;
+    },
     _detectImagePath: function (container) {
       // this relies on the CSS style leaflet-default-icon-path containing a 
       // relative url() that leads to a valid icon file.  Since that depends on
@@ -302,6 +310,12 @@ M.MapMLLayer = L.Layer.extend({
             moveend: this._onMoveEnd,
             zoomanim: this._onZoomAnim
         };
+    },
+    redraw: function() {
+      // for now, only redraw templated layers.
+        if (this._templatedLayer) {
+          this._templatedLayer.redraw();
+        }
     },
     _onZoomAnim: function(e) {
       var toZoom = e.zoom,
@@ -1131,6 +1145,9 @@ M.TemplatedImageLayer =  L.Layer.extend({
         this.setZIndex(this.options.zIndex);
         this._onMoveEnd();
     },
+    redraw: function() {
+        this._onMoveEnd();
+    },
     _onMoveEnd: function() {
       
       var map = this._map,
@@ -1140,10 +1157,10 @@ M.TemplatedImageLayer =  L.Layer.extend({
         overlayToRemove = this._imageOverlay;
         this._imageOverlay = M.imageOverlay(src,loc,size,0,this._container);
           
-      if (overlayToRemove) {
-        this._imageOverlay.on('load', function () {map.removeLayer(overlayToRemove);});
-      }
       this._imageOverlay.addTo(map);
+      if (overlayToRemove) {
+        this._imageOverlay.on('load error', function () {map.removeLayer(overlayToRemove);});
+      }
     },
     setZIndex: function (zIndex) {
         this.options.zIndex = zIndex;
@@ -1166,6 +1183,12 @@ M.TemplatedImageLayer =  L.Layer.extend({
         obj[this.options.extent.left] = this._TCRSToPCRS(this._map.getPixelBounds().min, this._map.getZoom()).x;
         obj[this.options.extent.top] = this._TCRSToPCRS(this._map.getPixelBounds().min, this._map.getZoom()).y;
         obj[this.options.extent.right] = this._TCRSToPCRS(this._map.getPixelBounds().max,this._map.getZoom()).x;
+        // hidden and other variables that may be associated
+        for (var v in this.options.extent) {
+            if (["width","height","left","right","top","bottom"].indexOf(v) < 0) {
+                obj[v] = this.options.extent[v];
+              }
+        }
         return L.Util.template(this._template.template, obj);
     },
     _TCRSToPCRS: function(coords, zoom) {
@@ -1221,9 +1244,11 @@ M.TemplatedImageLayer =  L.Layer.extend({
               }
               break;
           }
-        } else if (type === "hidden") {
-           extentVarNames.extent[name] = value;
-           // <input name="foo" type="hidden" value="bar"/>
+        } else {
+            const input = inputs[i];
+            extentVarNames.extent[name] = function() {
+                return input.getAttribute("value");
+            };
         }
       }
       return extentVarNames;
@@ -1257,9 +1282,17 @@ M.TemplatedLayer = L.Layer.extend({
     }
   },
   getEvents: function() {
-        return {
-            zoomstart: this._onZoomStart
-        };
+      return {
+          zoomstart: this._onZoomStart
+      };
+  },
+  redraw: function() {
+    this.closePopup();
+    for (var i=0;i<this._templates.length;i++) {
+      if (this._templates[i].type === 'tile' || this._templates[i].type === 'image') {
+          this._templates[i].layer.redraw();
+      }
+    }
   },
   _onZoomStart: function() {
       this.closePopup();
@@ -1335,9 +1368,11 @@ M.TemplatedLayer = L.Layer.extend({
         } else if (type === "zoom") {
           //<input name="..." type="zoom" value="0" min="0" max="17"/>
            queryVarNames.query.zoom = name;
-        } else if (type === "hidden") {
-           queryVarNames.query[name] = value;
-           // <input name="foo" type="hidden" value="bar"/>
+        } else {
+           const input = inputs[i];
+           queryVarNames.query[name] = function () {
+              return input.getAttribute("value");
+           };
         }
       }
       return queryVarNames;
@@ -1423,14 +1458,17 @@ M.TemplatedLayer = L.Layer.extend({
       obj[template.query.zoom] = zoom;
       obj[template.query.width] = map.getSize().x;
       obj[template.query.height] = map.getSize().y;
-
-      obj[template.query.width] = map.getSize().x;
-      obj[template.query.height] = map.getSize().y;
       obj[template.query.bottom] = tcrs2pcrs(bounds.max).y;
       obj[template.query.left] = tcrs2pcrs(bounds.min).x;
       obj[template.query.top] = tcrs2pcrs(bounds.min).y;
       obj[template.query.right] = tcrs2pcrs(bounds.max).x;
-      
+      // add hidden or other variables that may be present into the values to
+      // be processed by L.Util.template below.
+      for (var v in template.query) {
+          if (["i","j","x","y","easting","northing","width","height","zoom","left","right","top","bottom"].indexOf(v) < 0) {
+              obj[v] = template.query[v];
+          }
+      }
       fetch(L.Util.template(template.template, obj),{redirect: 'follow'}).then(
           function(response) {
             if (response.status !== 200) {
@@ -1519,8 +1557,8 @@ M.TemplatedTileLayer = L.TileLayer.extend({
         obj[this.options.tile.top] = this._tileMatrixToPCRSPosition(coords, 'top-left').y;
         obj[this.options.tile.bottom] = this._tileMatrixToPCRSPosition(coords, 'bottom-left').y;
         for (var v in this.options.tile) {
-            if (v !== "row" && v !== "col" && v !== "zoom" && v !== "left" && v !== "right" && v !== "top" && v !== "bottom") {
-              obj[v] = this.options.tile[v];
+            if (["row","col","zoom","left","right","top","bottom"].indexOf(v) < 0) {
+                obj[v] = this.options.tile[v];
             }
         }
         obj.r = this.options.detectRetina && L.Browser.retina && this.options.maxZoom > 0 ? '@2x' : '';
@@ -1645,9 +1683,12 @@ M.TemplatedTileLayer = L.TileLayer.extend({
         } else if (type === "zoom") {
           //<input name="..." type="zoom" value="0" min="0" max="17"/>
            tileVarNames.tile.zoom = name;
-        } else if (type === "hidden") {
-           tileVarNames.tile[name] = value;
-           // <input name="foo" type="hidden" value="bar"/>
+        } else {
+           // needs to be a const otherwise it gets overwritten
+           const input = inputs[i];
+           tileVarNames.tile[name] = function () {
+               return input.getAttribute("value");
+           };
         }
       }
       return tileVarNames;
@@ -2242,6 +2283,52 @@ M.MapMLLayerControl = L.Control.Layers.extend({
             }
         }
     },
+    _addMiscInputs: function(e) {
+      var obj;
+      for (var i = 0; i < this._layers.length; i++) {
+        obj = this._layers[i];
+        if (e.target === obj.layer && obj.layer._templateVars) {
+          var requiredTemplateControls = this._generateControlElements(obj.layer);
+          if (requiredTemplateControls) {
+            obj.input.closest('details').appendChild(requiredTemplateControls);
+          }
+        } 
+      }
+    },
+    _generateControlElements(layer) {
+      var frag = document.createDocumentFragment();
+      function propagateInputChange(e) {
+            scopedInput.setAttribute('value', e.target.value);
+            layer.redraw();
+      }
+      var templates = layer._templateVars;
+      for (var i=0;i<templates.length;i++) {
+        if (templates[i].type ===  'tile' || templates[i].type === 'image') {
+          var template = templates[i];
+          for (var j=0;j<template.values.length;j++) {
+            var mapmlInput = template.values[j];
+            if (mapmlInput.getAttribute('type') === 'datetime') {
+              // generate a <details><summary></summary><input...></details>
+              var deets = document.createElement('details'),
+                  summary = document.createElement('summary'),
+                  datetime = document.createElement('input');
+                  datetime.type = 'datetime-local';
+                  datetime.min = mapmlInput.getAttribute('min');
+                  datetime.max = mapmlInput.getAttribute('max');
+                  datetime.value = mapmlInput.getAttribute('value');
+                  datetime.step = mapmlInput.getAttribute('step');
+                  var scopedInput = mapmlInput;
+                  datetime.addEventListener('change', propagateInputChange);
+                  summary.innerText = mapmlInput.getAttribute('name');
+                  deets.appendChild(summary);
+                  deets.appendChild(datetime);
+              frag.appendChild(deets);
+            }
+          }
+        }
+      }
+      return frag;
+    },
     _withinZoomBounds: function(zoom, range) {
         return range.min <= zoom && zoom <= range.max;
     },
@@ -2262,7 +2349,7 @@ M.MapMLLayerControl = L.Control.Layers.extend({
             input,
             checked = this._map.hasLayer(obj.layer);
 
-        input = document.createElement('input');
+      input = document.createElement('input');
         input.type = 'checkbox';
         input.className = 'leaflet-control-layers-selector';
         input.defaultChecked = checked;
@@ -2276,11 +2363,27 @@ M.MapMLLayerControl = L.Control.Layers.extend({
         var name = document.createElement('span');
         
         this._setLegendLink(obj, name);
-        var holder = document.createElement('div');
+        var details = document.createElement('details'),
+          summary = document.createElement('summary'),
+          opacity = document.createElement('input'),
+          opacityControl = document.createElement('details'),
+          opacityControlSummary = document.createElement('summary');
+          opacityControlSummary.innerText = 'opacity';
+          opacityControl.appendChild(opacityControlSummary);
+          opacityControl.appendChild(opacity);
+        opacity.setAttribute('type','range');
+        opacity.setAttribute('min', '0');
+        opacity.setAttribute('max','1.0');
+        opacity.setAttribute('value', '1.0');
+        opacity.setAttribute('step','0.1');
         
-        Polymer.dom(label).appendChild(holder);
-        Polymer.dom(holder).appendChild(input);
-        Polymer.dom(holder).appendChild(name);
+        L.DomEvent.on(opacity,'change', obj.layer._changeOpacity, obj.layer);
+        
+        Polymer.dom(details).appendChild(summary);
+        Polymer.dom(label).appendChild(details);
+        Polymer.dom(summary).appendChild(input);
+        Polymer.dom(summary).appendChild(name);
+        Polymer.dom(details).appendChild(opacityControl);
 
         var container = this._overlaysList;
         Polymer.dom(container).appendChild(label);
@@ -2290,6 +2393,7 @@ M.MapMLLayerControl = L.Control.Layers.extend({
         // verify the extent and legend for the layer to know whether to
         // disable it , add the legend link etc.
         obj.layer.on('extentload', this._validateExtents, this);
+        obj.layer.once('extentload', this._addMiscInputs, this);
 
         return label;
     }

@@ -20,4 +20,9 @@
 .mapml-popup-overflow {
         overflow: auto;
         }
+/* this is to indent the nested details in the layer control */
+details > details {
+        margin-left: 1em;
+          
+        }
 

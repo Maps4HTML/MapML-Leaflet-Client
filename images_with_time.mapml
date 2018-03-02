@@ -1,0 +1,34 @@
+<mapml>
+  <head>
+    <title>Environment and Climate Change Canada - GDPS.DIAG - Dominant precipitation type</title>
+    <meta http-equiv="Content-Type" content="text/mapml;projection=OSMTILE"/>
+    <meta charset="utf-8"/>
+    <meta name="projection" content="OSMTILE"/>
+    <meta name="zoom" content="0"/>
+    <base href="/mapml/en/osmtile/test/"/>
+    <link rel="license" href="http://open.canada.ca/en/open-government-licence-canada" title="Open Government Licence - Canada"/>
+    <link rel="legend" href="http://geo.weather.gc.ca/geomet//?LANG=E%26SERVICE=WMS%26VERSION=1.1.1%26REQUEST=GetLegendGraphic%26STYLE=PRECIPNW%26LAYER=GDPS.DIAG_NW%26format=image/png"/>
+  </head>
+  <body>
+    <extent units="OSMTILE" method="GET">
+      <input name="xmn" type="xmin" min="0.0" max="256.0"/>
+      <input name="ymn" type="ymin" min="0.0" max="256.0"/>
+      <input name="xmx" type="xmax" min="0.0" max="256.0"/>
+      <input name="ymx" type="ymax" min="0.0" max="256.0"/>
+      <input name="z" type="zoom" value="0" min="0" max="18"/>
+      <input name="projection" type="projection" value="OSMTILE"/>
+      <input name="xmin" type="location" units="pcrs" position="top-left" axis="easting"/>
+      <input name="ymin" type="location" units="pcrs" position="bottom-left" axis="northing"/>
+      <input name="xmax" type="location" units="pcrs" position="top-right" axis="easting"/>
+      <input name="ymax" type="location" units="pcrs" position="top-left" axis="northing"/>
+      <input name="w" type="width"/>
+      <input name="h" type="height"/>
+      <input name="utc" type="datetime" min="2018-03-01T03:00:00" max="2018-03-11T00:00:00" value="2018-03-11T00:00:00" step="PT1H"/>
+      <template type="image" tref="http://geo.weather.gc.ca/geomet/?lang=E&amp;SERVICE=WMS&amp;VERSION=1.1.1&amp;SRS=EPSG:3857&amp;LAYERS=GDPS.DIAG_NW&amp;time={utc}&amp;&amp;BBOX={xmin},{ymin},{xmax},{ymax}&amp;REQUEST=GetMap&amp;FORMAT=image/png&amp;TRANSPARENT=TRUE&amp;WIDTH={w}&amp;HEIGHT={h}&amp;STYLES=PRECIPNW&amp;m4h=t"/>
+      <input name="i" type="location" units="map" axis="i"/>
+      <input name="j" type="location" units="map" axis="j"/>
+      <template type="query" tref="http://geo.weather.gc.ca/geomet/?lang=E&amp;SERVICE=WMS&amp;VERSION=1.1.1&amp;SRS=EPSG:3857&amp;LAYERS=GDPS.DIAG_NW&amp;time={utc}&amp;QUERY_LAYERS=GDPS.DIAG_NW&amp;time={utc}&amp;X={i}&amp;Y={j}&amp;INFO_FORMAT=text/plain&amp;BBOX={xmin},{ymin},{xmax},{ymax}&amp;REQUEST=GetFeatureInfo&amp;WIDTH={w}&amp;HEIGHT={h}&amp;m4h=t"/>
+    </extent>
+  </body>
+</mapml>
+
