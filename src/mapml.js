@@ -644,16 +644,17 @@ M.MapMLLayer = L.Layer.extend({
                           size = map.getSize();
                           imageOverlays[i] = M.imageOverlay(src,location,size,/* angle */0,container);
                   }
-                  var layersToRemove = layer._imageLayer.getLayers();
-                  var last=imageOverlays.length-1; 
+                  var layersToRemove = layer._imageLayer.getLayers(),
+                      last = imageOverlays.length-1,
+                      removeLayers = function () {
+                      for (var ic = 0;ic < layersToRemove.length;ic++) {
+                        layer._imageLayer.removeLayer(layersToRemove[ic]);
+                      }
+                  };
                   for (i=0;i < imageOverlays.length;i++) {
                     layer._imageLayer.addLayer(imageOverlays[i]);
                     if (i === last) {
-                      imageOverlays[i].on('load', function(e) {
-                        for (var i = 0;i < layersToRemove.length;i++) {
-                          layer._imageLayer.removeLayer(layersToRemove[i]);
-                        }
-                      });
+                      imageOverlays[i].on('load', removeLayers);
                     }
                   }
               }
@@ -1245,6 +1246,7 @@ M.TemplatedImageLayer =  L.Layer.extend({
               break;
           }
         } else {
+            /*jshint -W104 */
             const input = inputs[i];
             extentVarNames.extent[name] = function() {
                 return input.getAttribute("value");
@@ -1369,7 +1371,8 @@ M.TemplatedLayer = L.Layer.extend({
           //<input name="..." type="zoom" value="0" min="0" max="17"/>
            queryVarNames.query.zoom = name;
         } else {
-           const input = inputs[i];
+            /*jshint -W104 */
+            const input = inputs[i];
            queryVarNames.query[name] = function () {
               return input.getAttribute("value");
            };
@@ -1685,10 +1688,11 @@ M.TemplatedTileLayer = L.TileLayer.extend({
            tileVarNames.tile.zoom = name;
         } else {
            // needs to be a const otherwise it gets overwritten
-           const input = inputs[i];
-           tileVarNames.tile[name] = function () {
-               return input.getAttribute("value");
-           };
+          /*jshint -W104 */
+          const input = inputs[i];
+          tileVarNames.tile[name] = function () {
+              return input.getAttribute("value");
+          };
         }
       }
       return tileVarNames;
@@ -2295,7 +2299,7 @@ M.MapMLLayerControl = L.Control.Layers.extend({
         } 
       }
     },
-    _generateControlElements(layer) {
+    _generateControlElements: function (layer) {
       var frag = document.createDocumentFragment();
       function propagateInputChange(e) {
             scopedInput.setAttribute('value', e.target.value);
@@ -2371,6 +2375,8 @@ M.MapMLLayerControl = L.Control.Layers.extend({
           opacityControlSummary.innerText = 'opacity';
           opacityControl.appendChild(opacityControlSummary);
           opacityControl.appendChild(opacity);
+        L.DomUtil.addClass(details, 'mapml-control-layers');
+        L.DomUtil.addClass(opacityControl,'mapml-control-layers');
         opacity.setAttribute('type','range');
         opacity.setAttribute('min', '0');
         opacity.setAttribute('max','1.0');

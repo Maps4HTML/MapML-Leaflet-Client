@@ -21,7 +21,7 @@
       <input name="tymin" type="location" units="tilematrix" position="bottom-left" axis="northing"/>
       <input name="txmax" type="location" units="tilematrix" position="top-right" axis="easting"/>
       <input name="tymax" type="location" units="tilematrix" position="top-left" axis="northing"/>
-      <input name="utc" type="datetime" min="2018-03-01T03:00:00" max="2018-03-11T00:00:00" value="2018-03-11T00:00:00" step="PT1H"/>
+      <input name="utc" type="datetime" min="2018-03-02T18:00:00" max="2018-03-12T00:00:00" value="2018-03-03T12:00:00" step="PT1H"/>
 	  <input name="m4h" type="hidden" value="t"/>
       <template type="tile" tref="http://geo.weather.gc.ca/geomet/?lang=E&amp;SERVICE=WMS&amp;VERSION=1.1.1&amp;SRS=EPSG:3857&amp;LAYERS=GDPS.DIAG_NW&amp;time={utc}Z&amp;BBOX={txmin},{tymin},{txmax},{tymax}&amp;REQUEST=GetMap&amp;FORMAT=image/png&amp;TRANSPARENT=TRUE&amp;WIDTH=256&amp;HEIGHT=256&amp;STYLES=PRECIPNW&amp;m4h={m4h}"/>
       <input name="i" type="location" units="map" axis="i"/>

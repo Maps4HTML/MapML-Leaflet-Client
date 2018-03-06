@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>time input test</title>
+    <link rel="stylesheet" href="../bower_components/polymer-leaflet/leaflet.css" />
+    <link rel="stylesheet" href="../src/mapml.css" />
+    <script src="../bower_components/polymer-leaflet/leaflet-src.js"></script>
+    <script src="../bower_components/proj4/dist/proj4.js"></script> 
+    <script src="../bower_components/proj4leaflet/src/proj4leaflet.js"></script>
+    <script src="../src/mapml.js"></script>
+    <script src="../src/URI.js"></script>
+    <script src="../bower_components/webcomponentsjs/webcomponents-lite.min.js"></script>
+    <link rel="import" href="../bower_components/polymer/polymer.html">
+  </head>
+  <body>
+    <h3>MapML Leaflet plugin</h3>
+    <div id="osmtile-map" style="height: 300px;width: 40%;"></div>
+    <script>
+        addEventListener('WebComponentsReady', function() {
+                     cbmt =  M.mapMLLayer('http://geogratis.gc.ca/api/beta/mapml/en/osmtile/cbmt/',null,{zIndex: 0}),
+                     tiles = M.mapMLLayer('//localhost:8080/tiles',null,{zIndex: 1}),
+                     images = M.mapMLLayer('//localhost:8080/images',null,{zIndex: 2}),
+//                     te = M.mapMLLayer('http://geogratis.gc.ca/mapml/en/cbmtile/te2003/',null,{zIndex: 5}),
+//                     f = M.mapMLLayer('http://geogratis.gc.ca/api/beta/vectors/canvec/50k/features/',null,{zIndex: 7}),
+//                     f2 = M.mapMLLayer('http://geogratis.gc.ca/api/beta/vectors/canvec/50k/features/',null,{zIndex: 9}),
+          cbmtMap =    L.map('osmtile-map',{
+                  center: [45.398043,-75.70683],
+                  projection: 'OSMTILE',
+                  crs: M['OSMTILE'],
+                  zoom: 2,
+                  layers: [cbmt],
+                  fadeAnimation: true
+                }),
+          cbmtLayerControl = M.mapMlLayerControl({'Canada Base Map':cbmt,'Weather tiles': tiles, 'Weather images': images},{"collapsed":false}).addTo(cbmtMap);
+          cbmtMap.attributionControl.setPrefix('<a href="https://www.w3.org/community/maps4html/" title="W3C Maps4HTML Community Group">MapML</a>');
+          marker = L.marker([45.398043,-75.70683],{draggable:true}).addTo(cbmtMap);
+        });
+    </script>
+  </body>
+</html>

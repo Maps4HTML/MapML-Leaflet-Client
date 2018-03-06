@@ -16,12 +16,13 @@
 .leaflet-image-loaded {
         visibility: inherit;
         }
-        
 .mapml-popup-overflow {
         overflow: auto;
         }
 /* this is to indent the nested details in the layer control */
-details > details {
+/* details/summary is in progress 2018-03-02 on ms-edge so gonna rely on that...
+   https://wpdev.uservoice.com/forums/257854-microsoft-edge-developer/suggestions/6261266-details-summary-elements */
+.leaflet-control-layers details.mapml-control-layers > details.mapml-control-layers {
         margin-left: 1em;
           
         }

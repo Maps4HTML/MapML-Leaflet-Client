@@ -23,7 +23,7 @@
       <input name="ymax" type="location" units="pcrs" position="top-left" axis="northing"/>
       <input name="w" type="width"/>
       <input name="h" type="height"/>
-      <input name="utc" type="datetime" min="2018-03-01T03:00:00" max="2018-03-11T00:00:00" value="2018-03-11T00:00:00" step="PT1H"/>
+      <input name="utc" type="datetime" min="2018-03-02T18:00:00" max="2018-03-12T00:00:00" value="2018-03-03T12:00:00" step="PT1H"/>
       <template type="image" tref="http://geo.weather.gc.ca/geomet/?lang=E&amp;SERVICE=WMS&amp;VERSION=1.1.1&amp;SRS=EPSG:3857&amp;LAYERS=GDPS.DIAG_NW&amp;time={utc}&amp;&amp;BBOX={xmin},{ymin},{xmax},{ymax}&amp;REQUEST=GetMap&amp;FORMAT=image/png&amp;TRANSPARENT=TRUE&amp;WIDTH={w}&amp;HEIGHT={h}&amp;STYLES=PRECIPNW&amp;m4h=t"/>
       <input name="i" type="location" units="map" axis="i"/>
       <input name="j" type="location" units="map" axis="j"/>
