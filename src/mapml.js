@@ -2324,6 +2324,7 @@ M.MapMLLayerControl = L.Control.Layers.extend({
                   var scopedInput = mapmlInput;
                   datetime.addEventListener('change', propagateInputChange);
                   summary.innerText = mapmlInput.getAttribute('name');
+                  L.DomUtil.addClass(deets, 'mapml-control-layers');
                   deets.appendChild(summary);
                   deets.appendChild(datetime);
               frag.appendChild(deets);
