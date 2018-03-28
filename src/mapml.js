@@ -49,6 +49,8 @@ window.M = M;
     M.CBMTILE = new L.Proj.CRS('EPSG:3978',
   '+proj=lcc +lat_1=49 +lat_2=77 +lat_0=49 +lon_0=-95 +x_0=0 +y_0=0 +ellps=GRS80 +datum=NAD83 +units=m +no_defs',
   {
+    origin: [-34655800, 39310000],
+    bounds: new L.Bounds([[-7786476.885838887,-5153821.09213678],[7148753.233541353,7928343.534071138]]),
     resolutions: [
       38364.660062653464, 
       22489.62831258996, 
@@ -76,12 +78,13 @@ window.M = M;
       0.18520870375074083,
       0.11112522225044451,
       0.066145965625264591
-    ],
-    origin: [-34655800, 39310000]
+    ]
   });
     M.APSTILE = new L.Proj.CRS('EPSG:5936',
   '+proj=stere +lat_0=90 +lat_ts=50 +lon_0=-150 +k=0.994 +x_0=2000000 +y_0=2000000 +datum=WGS84 +units=m +no_defs',
   {
+    origin: [-2.8567784109255E7, 3.2567784109255E7],
+    bounds: L.bounds([[-28567784.109254867,-28567784.109254755],[32567784.109255023,32567784.10925506]]),
     resolutions: [
       238810.813354,
       119405.406677,
@@ -103,13 +106,13 @@ window.M = M;
       1.82198191331174,
       0.910990956788164,
       0.45549547826179
-    ],
-    origin: [-2.8567784109255E7, 3.2567784109255E7]
+    ]
   });
     M.OSMTILE = L.CRS.EPSG3857;
     L.setOptions(M.OSMTILE,
       { 
         origin: [-20037508.342787, 20037508.342787],
+        bounds: L.bounds([[-20026376.39,-20048966.10],[20026376.39,20048966.10]]),
         resolutions: [
           156543.0339,
           78271.51695,
@@ -371,7 +374,9 @@ M.MapMLLayer = L.Layer.extend({
             p;
         
         var xmin,ymin,xmax,ymax,v1,v2,extentZoomValue;
-            
+        
+        // todo: create an array of min values, converted to tcrs units
+        // take the Math.min of all of them.
         v1 = this._extent.querySelector('[type=xmin]').getAttribute('min');
         v2 = this._extent.querySelector('[type=xmax]').getAttribute('min');
         xmin = Math.min(v1,v2);
@@ -477,6 +482,12 @@ M.MapMLLayer = L.Layer.extend({
                       inp = serverExtent.querySelector('input[name='+varName+']');
                       if (inp) {
                         inputs.push(inp);
+                        // TODO: if this is an input@type=location 
+                        // get the TCRS min,max attribute values at the identified zoom level 
+                        // save this information as properties of the serverExtent,
+                        // perhaps as a bounds object so that it can be easily used
+                        // later by the layer control to determine when to enable
+                        // disable the layer for drawing.
                       } else {
                         console.log('input with name='+varName+' not found for template variable of same name');
                         // no match found, template won't be used
@@ -725,6 +736,7 @@ M.MapMLLayer = L.Layer.extend({
         return extent;
     },
     _validateExtent: function () {
+      // TODO: change so that the _extent bounds are set based on inputs
         var serverExtent = this._extent;
         if (!serverExtent || !serverExtent.querySelector || !this._map) {
             return;
@@ -859,6 +871,7 @@ M.MapMLLayer = L.Layer.extend({
     // a layer must share a projection with the map so that all the layers can
     // be overlayed in one coordinate space.  WGS84 is a 'wildcard', sort of.
     getProjection: function () {
+      // TODO review logic because input[type=projection] is deprecated
         if (!this._extent || !this._extent.querySelector('input[type=projection]')) return 'WGS84';
         var projection = this._extent.querySelector('input[type=projection]');
         if (!projection.getAttribute('value')) return 'WGS84';
@@ -2268,6 +2281,8 @@ M.MapMLLayerControl = L.Control.Layers.extend({
                 // get the 'bounds' of zoom levels of the layer as described by the server
                 zoomBounds = obj.layer.getZoomBounds();
                 projectionMatches = obj.layer._projectionMatches(this._map);
+                //the bounds intersecting the layer extent bounds is used to
+                // disable/enable the layer in the layer control
                 visible = projectionMatches && this._withinZoomBounds(zoom, zoomBounds) && bounds.intersects(obj.layer.getLayerExtentBounds(this._map)) ;
                 if (!visible) {
                     obj.input.disabled = true;
