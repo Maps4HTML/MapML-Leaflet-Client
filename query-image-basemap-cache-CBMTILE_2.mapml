@@ -13,22 +13,21 @@
   </head>
   <body>
     <extent units="CBMTILE" method="GET">
-      <input name="xmn" type="xmin" min="78848.0" max="295424.0"/>
-      <input name="ymn" type="ymin" min="103936.0" max="320512.0"/>
-      <input name="xmx" type="xmax" min="78848.0" max="295424.0"/>
-      <input name="ymx" type="ymax" min="103936.0" max="320512.0"/>
+      <input name="xmn" type="location" position="top-left" axis="x" min="78848.0" max="295424.0"/>
+      <input name="ymn" type="location"  position="top-left" axis="y" min="103936.0" max="320512.0"/>
+      <input name="xmx" type="location" position="bottom-right" axis="x" min="78848.0" max="295424.0"/>
+      <input name="ymx" type="location"  position="bottom-right" axis="y" min="103936.0" max="320512.0"/>
       <input name="z" type="zoom" value="10" min="10" max="15"/>
-      <input name="projection" type="projection" value="CBMTILE"/>
       <input name="xmin" type="location" units="pcrs" position="top-left" axis="easting"/>
       <input name="ymin" type="location" units="pcrs" position="bottom-left" axis="northing"/>
       <input name="xmax" type="location" units="pcrs" position="top-right" axis="easting"/>
       <input name="ymax" type="location" units="pcrs" position="top-left" axis="northing"/>
       <input name="w" type="width"/>
       <input name="h" type="height"/>
-      <template type="image" tref="http://maps.geogratis.gc.ca/wms/canvec_en?version=1.3.0&amp;service=WMS&amp;request=GetMap&amp;crs=EPSG:3978&amp;layers=land,hydro,man_made,resource_management,transport,administrative,elevation,toponymy&amp;styles=,,,,,,,&amp;bbox={xmin},{ymin},{xmax},{ymax}&amp;format=image/png&amp;transparent=false&amp;width={w}&amp;height={h}&amp;m4h=t"/>
+      <link rel="image" tref="http://maps.geogratis.gc.ca/wms/canvec_en?version=1.3.0&amp;service=WMS&amp;request=GetMap&amp;crs=EPSG:3978&amp;layers=land,hydro,man_made,resource_management,transport,administrative,elevation,toponymy&amp;styles=,,,,,,,&amp;bbox={xmin},{ymin},{xmax},{ymax}&amp;format=image/png&amp;transparent=false&amp;width={w}&amp;height={h}&amp;m4h=t"/>
       <input name="i" type="location" units="map" axis="i"/>
       <input name="j" type="location" units="map" axis="j"/>
-      <template type="query" tref="http://maps.geogratis.gc.ca/wms/canvec_en?i={i}&amp;j={j}&amp;version=1.3.0&amp;service=WMS&amp;request=GetFeatureInfo&amp;crs=EPSG:3978&amp;layers=waterbody_mid,waterbody_continental_large&amp;QUERY_LAYERS=waterbody_mid,waterbody_continental_large&amp;styles=&amp;bbox={xmin},{ymin},{xmax},{ymax}&amp;info_format=text/html&amp;width={w}&amp;height={h}&amp;m4h=t"/>
+      <link rel="query" tref="http://maps.geogratis.gc.ca/wms/canvec_en?i={i}&amp;j={j}&amp;version=1.3.0&amp;service=WMS&amp;request=GetFeatureInfo&amp;crs=EPSG:3978&amp;layers=waterbody_mid,waterbody_continental_large&amp;QUERY_LAYERS=waterbody_mid,waterbody_continental_large&amp;styles=&amp;bbox={xmin},{ymin},{xmax},{ymax}&amp;info_format=text/html&amp;width={w}&amp;height={h}&amp;m4h=t"/>
     </extent>
   </body>
 </mapml>

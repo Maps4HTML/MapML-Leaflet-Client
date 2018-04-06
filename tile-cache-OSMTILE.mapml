@@ -16,13 +16,12 @@
       <input name="ymin" type="location" units="tilematrix" position="bottom-left" axis="northing"/>
       <input name="xmax" type="location" units="tilematrix" position="top-right" axis="easting"/>
       <input name="ymax" type="location" units="tilematrix" position="top-left" axis="northing"/>
-      <input name="xmn" type="xmin" min="0.0" max="256.0"/>
-      <input name="ymn" type="ymin" min="0.0" max="256.0"/>
-      <input name="xmx" type="xmax" min="0.0" max="256.0"/>
-      <input name="ymx" type="ymax" min="0.0" max="256.0"/>
-      <input name="projection" type="projection" value="OSMTILE"/>
-      <template type="tile" tref="https://geoappext.nrcan.gc.ca/arcgis/rest/services/BaseMaps/CBMT_CBCT_GEOM_3857/MapServer/tile/{z}/{y}/{x}?m4h=t"/>
-      <template type="tile" tref="https://geoappext.nrcan.gc.ca/arcgis/rest/services/BaseMaps/CBMT_TXT_3857/MapServer/tile/{z}/{y}/{x}?m4h=t"/>
+      <input name="xmn" type="location" position="top-left" axis="x"   min="0.0" max="256.0"/>
+      <input name="ymn" type="location"  position="top-left" axis="y" min="0.0" max="256.0"/>
+      <input name="xmx" type="location" position="bottom-right" axis="x" min="0.0" max="256.0"/>
+      <input name="ymx" type="location"  position="bottom-right" axis="y" min="0.0" max="256.0"/>
+      <link rel="tile" tref="https://geoappext.nrcan.gc.ca/arcgis/rest/services/BaseMaps/CBMT_CBCT_GEOM_3857/MapServer/tile/{z}/{y}/{x}?m4h=t"/>
+      <link rel="tile" tref="https://geoappext.nrcan.gc.ca/arcgis/rest/services/BaseMaps/CBMT_TXT_3857/MapServer/tile/{z}/{y}/{x}?m4h=t"/>
     </extent>
   </body>
 </mapml>

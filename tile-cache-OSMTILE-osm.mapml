@@ -17,12 +17,11 @@
            to supply an input@name=s if they want to use the hardcoding, or provide
            a literal value of host name if necessary for the host.domain.tld in the template -->
       <input name="s" type="hidden" value="abc"/>
-      <input name="xmx" type="xmin" min="0.0" max="256.0"/>
-      <input name="ymn" type="ymin" min="0.0" max="256.0"/>
-      <input name="xmx" type="xmax" min="0.0" max="256.0"/>
-      <input name="ymx" type="ymax" min="0.0" max="256.0"/>
-      <input name="projection" type="projection" value="OSMTILE"/>
-      <template type="tile" tref="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"/>
+      <input name="xmn" type="location" position="top-left" axis="x"  min="0.0" max="256.0"/>
+      <input name="ymn" type="location"  position="top-left" axis="y"  min="0.0" max="256.0"/>
+      <input name="xmx" type="location" position="bottom-right" axis="x" min="0.0" max="256.0"/>
+      <input name="ymx" type="location"  position="bottom-right" axis="y" min="0.0" max="256.0"/>
+      <link rel="tile" tref="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"/>
     </extent>
   </body>
 </mapml>

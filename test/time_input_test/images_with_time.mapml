@@ -11,23 +11,22 @@
   </head>
   <body>
     <extent units="OSMTILE" method="GET">
-      <input name="xmn" type="xmin" min="0.0" max="256.0"/>
-      <input name="ymn" type="ymin" min="0.0" max="256.0"/>
-      <input name="xmx" type="xmax" min="0.0" max="256.0"/>
-      <input name="ymx" type="ymax" min="0.0" max="256.0"/>
+      <input name="xmn" type="location" position="top-left" axis="x" min="0.0" max="256.0"/>
+      <input name="ymn" type="location" position="top-left" axis="y" min="0.0" max="256.0"/>
+      <input name="xmx" type="location" position="bottom-right" axis="x" min="0.0" max="256.0"/>
+      <input name="ymx" type="location" position="bottom-right" axis="y" min="0.0" max="256.0"/>
       <input name="z" type="zoom" value="0" min="0" max="18"/>
-      <input name="projection" type="projection" value="OSMTILE"/>
       <input name="xmin" type="location" units="pcrs" position="top-left" axis="easting"/>
       <input name="ymin" type="location" units="pcrs" position="bottom-left" axis="northing"/>
       <input name="xmax" type="location" units="pcrs" position="top-right" axis="easting"/>
       <input name="ymax" type="location" units="pcrs" position="top-left" axis="northing"/>
       <input name="w" type="width"/>
       <input name="h" type="height"/>
-      <input name="utc" type="datetime" min="2018-03-02T18:00:00" max="2018-03-12T00:00:00" value="2018-03-03T12:00:00" step="PT1H"/>
-      <template type="image" tref="http://geo.weather.gc.ca/geomet/?lang=E&amp;SERVICE=WMS&amp;VERSION=1.1.1&amp;SRS=EPSG:3857&amp;LAYERS=GDPS.DIAG_NW&amp;time={utc}&amp;&amp;BBOX={xmin},{ymin},{xmax},{ymax}&amp;REQUEST=GetMap&amp;FORMAT=image/png&amp;TRANSPARENT=TRUE&amp;WIDTH={w}&amp;HEIGHT={h}&amp;STYLES=PRECIPNW&amp;m4h=t"/>
+      <input name="utc" type="datetime" min="2018-03-20T00:00:00Z" max="2018-03-30T00:00:00Z" value="2018-03-30T12:00:00Z" step="PT1H"/>
+      <link rel="image" tref="http://geo.weather.gc.ca/geomet/?lang=E&amp;SERVICE=WMS&amp;VERSION=1.1.1&amp;SRS=EPSG:3857&amp;LAYERS=GDPS.DIAG_NW&amp;time={utc}&amp;&amp;BBOX={xmin},{ymin},{xmax},{ymax}&amp;REQUEST=GetMap&amp;FORMAT=image/png&amp;TRANSPARENT=TRUE&amp;WIDTH={w}&amp;HEIGHT={h}&amp;STYLES=PRECIPNW&amp;m4h=t"/>
       <input name="i" type="location" units="map" axis="i"/>
       <input name="j" type="location" units="map" axis="j"/>
-      <template type="query" tref="http://geo.weather.gc.ca/geomet/?lang=E&amp;SERVICE=WMS&amp;VERSION=1.1.1&amp;SRS=EPSG:3857&amp;LAYERS=GDPS.DIAG_NW&amp;time={utc}&amp;QUERY_LAYERS=GDPS.DIAG_NW&amp;time={utc}&amp;X={i}&amp;Y={j}&amp;INFO_FORMAT=text/plain&amp;BBOX={xmin},{ymin},{xmax},{ymax}&amp;REQUEST=GetFeatureInfo&amp;WIDTH={w}&amp;HEIGHT={h}&amp;m4h=t"/>
+      <link rel="query" tref="http://geo.weather.gc.ca/geomet/?lang=E&amp;SERVICE=WMS&amp;VERSION=1.1.1&amp;SRS=EPSG:3857&amp;LAYERS=GDPS.DIAG_NW&amp;time={utc}&amp;QUERY_LAYERS=GDPS.DIAG_NW&amp;time={utc}&amp;X={i}&amp;Y={j}&amp;INFO_FORMAT=text/plain&amp;BBOX={xmin},{ymin},{xmax},{ymax}&amp;REQUEST=GetFeatureInfo&amp;WIDTH={w}&amp;HEIGHT={h}&amp;m4h=t"/>
     </extent>
   </body>
 </mapml>
