@@ -50,7 +50,7 @@ window.M = M;
   '+proj=lcc +lat_1=49 +lat_2=77 +lat_0=49 +lon_0=-95 +x_0=0 +y_0=0 +ellps=GRS80 +datum=NAD83 +units=m +no_defs',
   {
     origin: [-34655800, 39310000],
-    bounds: new L.Bounds([[-7786476.885838887,-5153821.09213678],[7148753.233541353,7928343.534071138]]),
+    bounds: L.bounds([[-7786476.885838887,-5153821.09213678],[7148753.233541353,7928343.534071138]]),
     resolutions: [
       38364.660062653464, 
       22489.62831258996, 
@@ -113,6 +113,89 @@ window.M = M;
       { 
         origin: [-20037508.342787, 20037508.342787],
         bounds: L.bounds([[-20026376.39,-20048966.10],[20026376.39,20048966.10]]),
+        coordsys: {
+          tcrs: {
+            x: {
+              name: "x",
+              min: 0, 
+              max: "something-different-at-each-zoom"
+            },
+            y: {
+              name: "y",
+              min:0, 
+              max: "something-different-at-each-zoom"
+            },
+            z: {
+              name: "z", // zoom
+              min: 0,
+              get max() {
+                return M.OSMTILE.options.resolutions.length;
+              }
+            }
+          },
+          pcrs: {
+            easting: {
+              name: "easting",
+              get min () { 
+                return M.OSMTILE.options.bounds.min.x;
+              },
+              get max() {
+                return M.OSMTILE.options.bounds.max.x;
+              }}, 
+            northing: {
+              name: "northing", 
+              get min () { 
+                return M.OSMTILE.options.bounds.min.y; 
+              },
+              get max() { 
+                return M.OSMTILE.options.bounds.max.y; 
+              }}
+          }, 
+          gcrs: {
+            longitude: {
+              name: "longitude",
+              get min() {
+                return "calculated longitude based on unprojection of bounds min";
+              },
+              get max() {
+                return "calculated longitude based on unprojection of bounds max";
+              }
+            }, 
+            latitude: {
+              name: "latitude",
+              get min() {
+                return "calculated latitude based on unprojection of bounds min";
+              },
+              get max() {
+                return "calculated latitude based on unprojection of bounds max";
+              }
+            }
+          },
+          map: {
+            i: {
+              name: "i"
+            },
+            j: {
+              name: "j"
+            }
+          },
+          tilematrix: {
+            column: {
+              name: "column",
+              min: 0, // for other tcrs might not be 0 e.g. CBMTILE
+              get max() {
+                return "calculated max tile col based on bounds.x -> pixels -> tile";
+              }
+            },
+            row: {
+              name: "row",
+              min: 0,
+              get max() {
+                return "calculated max tile row base on bounds.y -> pixels -> tile";
+              }
+            }
+          }
+        },
         resolutions: [
           156543.0339,
           78271.51695,
@@ -142,7 +225,108 @@ window.M = M;
         ]
       });
 }());
-
+M.getBounds = function (extent) {
+     // is there a default TCRS that could be used for @units ?  OSMTILE ??
+      var units = extent.getAttribute("units").toUpperCase(),
+          crs = M[units],
+          // need to decide what to do when zoom doesn't exist/ is empty
+          zoom = extent.querySelector("input[type=zoom]") ? extent.querySelector("input[type=zoom]").getAttribute("value"): null;
+      if (!zoom) { console.log("No zoom indicator found, abort!"); return; }
+      if (crs === undefined) { console.log("No matching TCRS found for: "+units); return; }
+      
+      // maybe define a property on the crs which can be accessed as a hash
+      // via keywords like pcrs gcrs, tcrs, map, tilematrix e.g. crs["pcrs"]
+      // which would contain axis names, axis default min/max values, positions?
+      // also transformation functions to / from tcrs <-> pcrs, tcrs <-> gcrs
+      // perhaps distance functions for each sub-crs
+     
+      
+      // for each template or @action, create an array element object containing
+      // an array of objects, each of which represents a location input that is
+      // associated to the template or action. The object model is like so:
+      // { units: string, axis: string, min: number, max: number, position: string }
+      // some of these properties may be taken from 'default' values, for
+      // example the min value of a location axis could be taken from the CRS
+      // 
+      // for each pair of input[@type=location][@units][@axis is one of orthogonal-axes-corresponding-to-@units-cs]
+      var inputVars = [];
+      if (extent.hasAttribute("action")) {
+        // process all input[type=location] according to zoom value
+        
+      } else {
+          // for each variable reference, recursively search the extent for
+          // pairs of inputs representing bounds of the _extent_ and from the
+          // min/max values of those inputs determine the bounds of the server's
+          // extent 
+          // in the original mapml spec we used input/@type=(x|y)min|(x|y)max/(@min|@max) to establish the extent corners
+          // now the equivalent of <input type="xmin" min="0" max="256"/> would be
+          // <input type=location units=tcrs position=top-left axis="x" min="0" max="256"/>
+          
+          var tlist = extent.querySelectorAll('template'),
+              varNamesRe = (new RegExp('(?:\{)(.*?)(?:\})','g'));
+          for (var i=0;i< tlist.length;i++) {
+            var t = tlist[i],
+                template = t.getAttribute('tref'), v,
+                inputs = [];
+            while ((v = varNamesRe.exec(template)) !== null) {
+              var varName = v[1],
+              inp = extent.querySelector('input[name='+varName+'][type=location]');
+              if (inp) {
+                var cs, position, axis, min, max;
+                /* need a function to validate the found attribute value against the domain of legal values and a default value */
+                
+                if (inp.hasAttribute("units")) {
+                  cs = crs.options.coordsys[inp.getAttribute("units").toLowerCase()];
+                } else {
+                  // default units is tcrs
+                  cs = crs.options.coordsys.tcrs;
+                }
+                // what to do if cs is undefined here??  probably ignore the input and hope there are others
+                // which contribute required info for the bounds...
+                
+                axis = cs[inp.getAttribute("axis").toLowerCase()];
+                if (axis) {
+                  min = (inp.hasAttribute("min") && !Number.isNaN(parseFloat(inp.getAttribute("min")))) ? parseFloat(inp.getAttribute("min")): axis.min; 
+                  max = (inp.hasAttribute("max") && !Number.isNaN(parseFloat(inp.getAttribute("max")))) ? parseFloat(inp.getAttribute("max")): axis.max;
+                  // need to group coordinate system axes into pairs so that we can
+                  // determine the bounds of the service
+                  
+                } else {
+                  // what to do if axis is undefined here?? probably ignore the input per previous comment
+                }
+                position = (inp.hasAttribute("position") && inp.getAttribute("postion") !== "") ? inp.getAttribute("position").toLowerCase() : "default-position-keyword";
+                inputs.push({
+                  units: inp.getAttribute("units"),
+                  position: inp.getAttribute("position"), 
+                  axis: inp.getAttribute("axis"), 
+                  min: inp.getAttribute("min"), 
+                  max: inp.getAttribute("max")
+                });
+                function domainValidate(value, domain, defaultValue) {
+                    var i = domain.indexOf(value);
+                    if (i > -1) {
+                      return domain[i];
+                    } else {
+                      return defaultValue;
+                    }
+                }
+                // TODO: if this is an input@type=location 
+                // get the TCRS min,max attribute values at the identified zoom level 
+                // save this information as properties of the serverExtent,
+                // perhaps as a bounds object so that it can be easily used
+                // later by the layer control to determine when to enable
+                // disable the layer for drawing.
+              } else {
+                console.log('input with name='+varName+' not found for template variable of same name');
+                // no match found, template won't be used
+              }
+            }
+            inputVars.push(inputs);
+          }
+      }
+      
+      return L.bounds([[0,0],[0,0]]);
+};
 M.Util = {
   coordsToArray: function(containerPoints) {
     // returns an array of arrays of coordinate pairs coordsToArray("1,2,3,4") -> [[1,2],[3,4]]
@@ -466,7 +650,10 @@ M.MapMLLayer = L.Layer.extend({
                     if (mapml.querySelector('feature,image,tile')) {
                         layer._content = mapml;
                     }
-                } else if (!serverExtent.hasAttribute("action") && serverExtent.querySelector('template') && serverExtent.hasAttribute("units") && serverExtent.getAttribute("units") !== "WGS84") {
+                } else if (!serverExtent.hasAttribute("action") 
+                        && serverExtent.querySelector('template') 
+                        && serverExtent.hasAttribute("units") 
+                        && serverExtent.getAttribute("units") !== "WGS84") {
                   layer._templateVars = [];
                   // set up the URL template and associated inputs (which yield variable values when processed)
                   var tlist = serverExtent.querySelectorAll('template'),
@@ -523,6 +710,8 @@ M.MapMLLayer = L.Layer.extend({
                 }
                 if (layer._map) {
                     layer._validateExtent();
+                    var b = M.getBounds(layer._extent);
+
                     // if the layer is checked in the layer control, force the addition
                     // of the attribution just received
                     if (layer._map.hasLayer(layer)) {

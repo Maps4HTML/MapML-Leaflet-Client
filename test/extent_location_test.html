@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>test template</title>
+    <link rel="stylesheet" href="../bower_components/polymer-leaflet/leaflet.css" />
+    <link rel="stylesheet" href="../src/mapml.css" />
+    <script src="../bower_components/polymer-leaflet/leaflet-src.js"></script>
+    <script src="../bower_components/proj4/dist/proj4.js"></script> 
+    <script src="../bower_components/proj4leaflet/src/proj4leaflet.js"></script>
+    <script src="../src/mapml.js"></script>
+    <script src="../src/URI.js"></script>
+    <script src="../bower_components/webcomponentsjs/webcomponents-lite.min.js"></script>
+    <link rel="import" href="../bower_components/polymer/polymer.html">
+  </head>
+  <body>
+    <h3>MapML Leaflet plugin test</h3>
+    <div id="osmtile-map" style="height: 300px;width: 40%;"></div>
+    <div id="cbmtile-map" style="height: 300px;width: 40%;"></div>
+    
+    <script>
+        addEventListener('WebComponentsReady', function() {
+                     cbmt =  M.mapMLLayer('extent_location_test/location_units_tilematrix_min_max',null,{zIndex: 0}),
+          cbmtMap =    L.map('osmtile-map',{
+                  center: [45.398043,-75.70683],
+                  projection: 'OSMTILE',
+                  crs: M['OSMTILE'],
+                  zoom: 2,
+                  layers: [cbmt],
+                  fadeAnimation: true
+                }),
+          cbmtLayerControl = M.mapMlLayerControl({'Canada Base Map':cbmt},{"collapsed":true}).addTo(cbmtMap);
+          cbmtMap.attributionControl.setPrefix('<a href="https://www.w3.org/community/maps4html/" title="W3C Maps4HTML Community Group">MapML</a>');
+          marker = L.marker([45.398043,-75.70683],{draggable:true}).addTo(cbmtMap);
+          
+//         lcc_cbmt = M.mapMLLayer('extent_location_test/input_location_units_pcrs',null,{zIndex: 0}),
+//         lccMap = L.map('cbmtile-map',{
+//                  center: [45.398043,-75.70683],
+//                  projection: 'CBMTILE',
+//                  crs: M['CBMTILE'],
+//                  zoom: 2,
+//                  layers: [lcc_cbmt],
+//                  fadeAnimation: true
+//                })
+        });
+    </script>
+  </body>
+</html>

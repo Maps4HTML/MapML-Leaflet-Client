@@ -1,0 +1,36 @@
+<mapml>
+  <head>
+    <title>location@units=pcrs @axis=easting/northing  @min/@max</title>
+    <meta http-equiv="Content-Type" content="text/mapml"/>
+    <meta charset="utf-8"/>
+    <!-- name=tcrs replaces name=projection which is deprecated -->
+    <!-- STILL leaves a DRY issue as to which takes precedence: meta@name=tcrs or extent@units -->
+    <!-- per Roy Fielding: "Given multiple sources of metadata and the possibility that those sources may be inconsistent, an architect must decide what source of metadata has the highest priority and thus shall be considered authoritative in determining the desired behavior of the recipient." https://www.w3.org/2001/tag/doc/mime-respect.html#what -->
+    <!-- SO SINCE THE ARCHITECTZ ARE WRITING THIS DOCUMENT: extent@untis SHALL be considered authoritative
+         metadata AND we will try to keep projection information INSIDE the message
+         SO THAT no conflict can arise between message container units metadata and
+         embedded metadata because the former won't exist -->
+    <meta name="tcrs" content="CBMTILE"/>
+    <meta name="zoom" content="0"/>
+    <link rel="license" href="https://www.nrcan.gc.ca/earth-sciences/geography/atlas-canada/read-about-topographic-maps/16840#topolicensing" title="Toporama © Natural Resources Canada"/>
+  </head>
+  <body>
+    <!-- no input@type=projection, which is deprecated. Get that info from the extent@units -->
+    <extent units="CBMTILE" method="GET">
+      <!-- no unused input@type=xmin etc merely to define the bounds of the extent -->
+      <!-- bounds must be derived from used inputs OR imputed with heuristics -->
+      <input name="z" type="zoom" value="0" min="0" max="19"/>
+      <!-- use input@type=location instead of input@type=xmin etc which are deprecated
+          this tests that the extent is established via tile coordinates min max values 
+          which can be converted to pixels or meters or lat/long as required -->
+      <input name="w" type="width"/>
+      <input name="h" type="height"/>
+      <input name="xmin" type="location" units="pcrs" position="top-left" axis="easting" min="-7192737.96" max="333754.20"/>
+      <input name="ymin" type="location" units="pcrs" position="bottom-left" axis="northing" min="2014497.43" max="4290855.71"/>
+      <input name="xmax" type="location" units="pcrs" position="top-right" axis="easting" min="-7192737.96" max="333754.20"/>
+      <input name="ymax" type="location" units="pcrs" position="top-left" axis="northing" min="2014497.43" max="4290855.71"/>
+      <link rel="image" tref="http://wms.ess-ws.nrcan.gc.ca/wms/toporama_en?SERVICE=WMS&amp;REQUEST=GetMap&amp;FORMAT=image/jpeg&amp;TRANSPARENT=FALSE&amp;STYLES=&amp;VERSION=1.3.0&amp;LAYERS=WMS-Toporama&amp;WIDTH={w}&amp;HEIGHT={h}&amp;CRS=EPSG:3978&amp;BBOX={xmin},{ymin},{xmax},{ymax}&amp;m4h=t" />
+    </extent>
+  </body>
+</mapml>
+

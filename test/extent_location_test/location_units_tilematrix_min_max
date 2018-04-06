@@ -1,0 +1,26 @@
+<mapml>
+  <head>
+    <title>location@units=tilematrix @axis=row/column  @min/@max</title>
+    <meta http-equiv="Content-Type" content="text/mapml"/>
+    <meta charset="utf-8"/>
+    <!-- name=tcrs replaces name=projection which is deprecated -->
+    <meta name="tcrs" content="OSMTILE"/>
+    <meta name="zoom" content="0"/>
+    <base href="http://geogratis.gc.ca/mapml/en/osmtile/cbmt/"/>
+    <link rel="license" href="http://open.canada.ca/en/open-government-licence-canada" title="Open Government Licence - Canada"/>
+  </head>
+  <body>
+    <!-- no input@type=projection, which is deprecated. Get that info from the extent@units -->
+    <extent units="OSMTILE" method="GET">
+      <input name="z" type="zoom" value="0" min="0" max="18"/>
+      <!-- use input@type=location instead of input@type=xmin etc which are deprecated
+          this tests that the extent is established via tile coordinates min max values 
+          which can be converted to pixels or meters or lat/long as required -->
+      <input name="y" type="location" units="tilematrix" axis="row" min="0" max="0"/>
+      <input name="x" type="location" units="tilematrix" axis="column" min="0" max="0"/>
+      <link rel="tile" tref="https://geoappext.nrcan.gc.ca/arcgis/rest/services/BaseMaps/CBMT_CBCT_GEOM_3857/MapServer/tile/{z}/{y}/{x}?m4h=t"/>
+      <link rel="tile" tref="https://geoappext.nrcan.gc.ca/arcgis/rest/services/BaseMaps/CBMT_TXT_3857/MapServer/tile/{z}/{y}/{x}?m4h=t"/>
+    </extent>
+  </body>
+</mapml>
+
