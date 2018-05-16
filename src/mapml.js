@@ -511,7 +511,7 @@ M.MapMLLayer = L.Layer.extend({
       //  hidden: [{name: name, value: value}]}
 
       var extentVarNames = {extent:{}};
-      extentVarNames.extent["hidden"] = [];
+      extentVarNames.extent.hidden = [];
       for (var i=0;i<inputs.length;i++) {
         var type = inputs[i].getAttribute("type"), 
             units = inputs[i].getAttribute("units"), 
@@ -566,7 +566,7 @@ M.MapMLLayer = L.Layer.extend({
               break;
           }
         } else if (type === "hidden") {
-            extentVarNames.extent["hidden"].push({name: name, value: value});
+            extentVarNames.extent.hidden.push({name: name, value: value});
         }
       }
       return extentVarNames;
