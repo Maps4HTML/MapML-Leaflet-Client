@@ -111,19 +111,23 @@ window.M = M;
     M.OSMTILE = L.CRS.EPSG3857;
     L.setOptions(M.OSMTILE,
       { 
-        origin: [-20037508.342787, 20037508.342787],
-        bounds: L.bounds([[-20026376.39,-20048966.10],[20026376.39,20048966.10]]),
-        coordsys: {
+        origin: [M.OSMTILE.projection.bounds.min.x, M.OSMTILE.projection.bounds.max.y],
+        bounds: M.OSMTILE.projection.bounds,
+        axes: {
           tcrs: {
             x: {
               name: "x",
               min: 0, 
-              max: "something-different-at-each-zoom"
+              max: function (zoom) {
+                return M.OSMTILE.getProjectedBounds(zoom).max.x;
+              }
             },
             y: {
               name: "y",
               min:0, 
-              max: "something-different-at-each-zoom"
+              max: function (zoom) {
+                return M.OSMTILE.getProjectedBounds(zoom).max.y;
+              }
             },
             z: {
               name: "z", // zoom
@@ -155,19 +159,23 @@ window.M = M;
             longitude: {
               name: "longitude",
               get min() {
-                return "calculated longitude based on unprojection of bounds min";
+                // TODO should unproject bounds to be DRY
+                return M.OSMTILE.unproject(M.OSMTILE.projection.bounds.min).lng;
               },
               get max() {
-                return "calculated longitude based on unprojection of bounds max";
+                // TODO sTODO should unproject bounds to be DRY
+                return M.OSMTILE.unproject(M.OSMTILE.projection.bounds.max).lng;
               }
             }, 
             latitude: {
               name: "latitude",
               get min() {
-                return "calculated latitude based on unprojection of bounds min";
+                // TODO TODO should unproject bounds to be DRY
+                return M.OSMTILE.unproject(M.OSMTILE.projection.bounds.min).lat;
               },
               get max() {
-                return "calculated latitude based on unprojection of bounds max";
+                // TODO TODO should unproject bounds to be DRY
+                return M.OSMTILE.unproject(M.OSMTILE.projection.bounds.max).lat;
               }
             }
           },
@@ -183,15 +191,15 @@ window.M = M;
             column: {
               name: "column",
               min: 0, // for other tcrs might not be 0 e.g. CBMTILE
-              get max() {
-                return "calculated max tile col based on bounds.x -> pixels -> tile";
+              max: function (zoom) {
+                return M.OSMTILE.getProjectedBounds(zoom).max.x / 256;
               }
             },
             row: {
               name: "row",
               min: 0,
-              get max() {
-                return "calculated max tile row base on bounds.y -> pixels -> tile";
+              max: function (zoom) {
+                return M.OSMTILE.getProjectedBounds(zoom).max.y / 256;
               }
             }
           }
@@ -226,106 +234,61 @@ window.M = M;
       });
 }());
 M.getBounds = function (extent) {
-     // is there a default TCRS that could be used for @units ?  OSMTILE ??
-      var units = extent.getAttribute("units").toUpperCase(),
+      // TODO re-think the whole use of service bounds for disabling layers.
+      // bounds for the extent are used to 'disable' the layer in the layer control
+      // when the map extent does not intersect the calculated or default bounds 
+      // assigned to the layer or the map zoom does not fall in the zoom range
+      // of the service
+      var units = (extent.hasAttribute("units") && extent.getAttribute("units") !== "") ? extent.getAttribute("units").toUpperCase() : "OSMTILE",
           crs = M[units],
           // need to decide what to do when zoom doesn't exist/ is empty
           zoom = extent.querySelector("input[type=zoom]") ? extent.querySelector("input[type=zoom]").getAttribute("value"): null;
-      if (!zoom) { console.log("No zoom indicator found, abort!"); return; }
+      if (!zoom) { console.log("No zoom found"); return; }
       if (crs === undefined) { console.log("No matching TCRS found for: "+units); return; }
+      return crs.options.bounds;
       
-      // maybe define a property on the crs which can be accessed as a hash
-      // via keywords like pcrs gcrs, tcrs, map, tilematrix e.g. crs["pcrs"]
-      // which would contain axis names, axis default min/max values, positions?
-      // also transformation functions to / from tcrs <-> pcrs, tcrs <-> gcrs
-      // perhaps distance functions for each sub-crs
-     
-      
-      // for each template or @action, create an array element object containing
-      // an array of objects, each of which represents a location input that is
-      // associated to the template or action. The object model is like so:
-      // { units: string, axis: string, min: number, max: number, position: string }
-      // some of these properties may be taken from 'default' values, for
-      // example the min value of a location axis could be taken from the CRS
-      // 
-      // for each pair of input[@type=location][@units][@axis is one of orthogonal-axes-corresponding-to-@units-cs]
-      var inputVars = [];
-      if (extent.hasAttribute("action")) {
-        // process all input[type=location] according to zoom value
-        
-      } else {
-          // for each variable reference, recursively search the extent for
-          // pairs of inputs representing bounds of the _extent_ and from the
-          // min/max values of those inputs determine the bounds of the server's
-          // extent 
-          // in the original mapml spec we used input/@type=(x|y)min|(x|y)max/(@min|@max) to establish the extent corners
-          // now the equivalent of <input type="xmin" min="0" max="256"/> would be
-          // <input type=location units=tcrs position=top-left axis="x" min="0" max="256"/>
-          
-          var tlist = extent.querySelectorAll('template'),
-              varNamesRe = (new RegExp('(?:\{)(.*?)(?:\})','g'));
-          for (var i=0;i< tlist.length;i++) {
-            var t = tlist[i],
-                template = t.getAttribute('tref'), v,
-                inputs = [];
-            while ((v = varNamesRe.exec(template)) !== null) {
-              var varName = v[1],
-              inp = extent.querySelector('input[name='+varName+'][type=location]');
-              if (inp) {
-                var cs, position, axis, min, max;
-                /* need a function to validate the found attribute value against the domain of legal values and a default value */
-                
-                if (inp.hasAttribute("units")) {
-                  cs = crs.options.coordsys[inp.getAttribute("units").toLowerCase()];
-                } else {
-                  // default units is tcrs
-                  cs = crs.options.coordsys.tcrs;
-                }
-                // what to do if cs is undefined here??  probably ignore the input and hope there are others
-                // which contribute required info for the bounds...
-                
-                axis = cs[inp.getAttribute("axis").toLowerCase()];
-                if (axis) {
-                  min = (inp.hasAttribute("min") && !Number.isNaN(parseFloat(inp.getAttribute("min")))) ? parseFloat(inp.getAttribute("min")): axis.min; 
-                  max = (inp.hasAttribute("max") && !Number.isNaN(parseFloat(inp.getAttribute("max")))) ? parseFloat(inp.getAttribute("max")): axis.max;
-                  // need to group coordinate system axes into pairs so that we can
-                  // determine the bounds of the service
-                  
-                } else {
-                  // what to do if axis is undefined here?? probably ignore the input per previous comment
-                }
-                position = (inp.hasAttribute("position") && inp.getAttribute("postion") !== "") ? inp.getAttribute("position").toLowerCase() : "default-position-keyword";
-                inputs.push({
-                  units: inp.getAttribute("units"),
-                  position: inp.getAttribute("position"), 
-                  axis: inp.getAttribute("axis"), 
-                  min: inp.getAttribute("min"), 
-                  max: inp.getAttribute("max")
-                });
-                function domainValidate(value, domain, defaultValue) {
-                    var i = domain.indexOf(value);
-                    if (i > -1) {
-                      return domain[i];
-                    } else {
-                      return defaultValue;
-                    }
-                }
-                // TODO: if this is an input@type=location 
-                // get the TCRS min,max attribute values at the identified zoom level 
-                // save this information as properties of the serverExtent,
-                // perhaps as a bounds object so that it can be easily used
-                // later by the layer control to determine when to enable
-                // disable the layer for drawing.
-              } else {
-                console.log('input with name='+varName+' not found for template variable of same name');
-                // no match found, template won't be used
-              }
-            }
-            inputVars.push(inputs);
-          }
-      }
-      
-      return L.bounds([[0,0],[0,0]]);
+      // for each pair of input[@type=location][@units][@axis is one of orthogonal-axes-corresponding-to-@units-cs] 
+      // x,easting,longitude,column
+      // y,northing,latitude,row
+
+//      var minXselector = 'input[type=location i][axis=x i][min],input[type=location i][axis=easting i][min],input[type=location i][axis=longitude i][min],input[type=location i][axis=column i][min]',
+//          minYselector = 'input[type=location i][axis=y i][min],input[type=location i][axis=northing i][min],input[type=location i][axis=latitude i][min],input[type=location i][axis=row i][min]',
+//          maxXselector = 'input[type=location i][axis=x i][max],input[type=location i][axis=easting i][max],input[type=location i][axis=longitude i][max],input[type=location i][axis=column i][max]',
+//          maxYselector = 'input[type=location i][axis=y i][max],input[type=location i][axis=northing i][max],input[type=location i][axis=latitude i][max],input[type=location i][axis=row i][max]';
+//
+//
+//
+//      var inputs = extent.querySelectorAll('minXselector');
+//      if (inputs) {
+//        for (var i=0;i<inputs.length;i++) {
+//          var axis = inputs[i].getAttribute("axis").toLowerCase(), yinputs;
+//          switch (axis) {
+//            case 'x':
+//              yinputs = extent.querySelectorAll('input[type=location i][axis=y i][min]');
+//              // use the minimum y value from yinputs@min >= crs.options.axes.tcrs.y.min as y value
+//              // use inputs[i]@min > crs.options.axes.tcrs.x.min ? inputs[i]@min : crs.options.axes.tcrs.x.min as x value
+//              // create a  L.point from the x,y above
+//              break;
+//            case 'easting':
+//              yinputs = extent.querySelectorAll('input[type=location i][axis=northing i][min]');
+//              // use the minimum y value from yinputs@min >= crs.options.axes.pcrs.northing.min as y value
+//              // use inputs[i]@min > crs.options.axes.pcrs.easting.min ? inputs[i]@min : crs.options.axes.pcrs.easting.min as x value
+//              // create a point from the easting, northing above
+//              // transform the pcrs to a tcrs point at the current zoom
+//              break;
+//            case 'longitude':
+//              yinputs = extent.querySelectorAll('input[type=location i][axis=latitude i][min]');
+//              // use the minimum y value from yinputs@min >= crs.options.axes.gcrs.latitude.min as y value
+//              // use inputs[i]@min > crs.options.axes.gcrs.longitude.min ? inputs[i]@min : crs.options.axes.gcrs.longitude.min as x value
+//              // create a point from the lat, long above
+//              // project to a pcrs point, if there is a pcrs (i.e. not a WGS84 extent)
+//              // 
+//            case 'column':
+//            default:
+//          }
+//        }
+//      }
+//      return L.bounds([[0,0],[0,0]]);
 };
 M.Util = {
   coordsToArray: function(containerPoints) {
@@ -431,23 +394,10 @@ M.MapMLLayer = L.Layer.extend({
               opacity: this.options.opacity,
               imagePath: this._detectImagePath(this._map.getContainer()),
               onEachFeature: function(properties, geometry) {
-                var type;
-                if (geometry instanceof L.Polygon) {
-                  type = "Polygon";
-                } else if (geometry instanceof L.Polyline) {
-                  type = "LineString";
-                } else if (geometry instanceof L.Marker) {
-                  type = "Point";
-                } else {
-                  type = "Unknown";
-                }
-                var popupContent = "<p>Type: " +  type + "</p>";
-                for (var i=0;i<properties.childNodes.length;i++) {
-                  if (properties.childNodes[i].nodeType === Node.ELEMENT_NODE) {
-                      popupContent += properties.childNodes[i].tagName+ " = " + properties.childNodes[i].textContent +"<br>";
-                  }
-                }
-                geometry.bindPopup(popupContent, {autoPan:false});
+                // need to parse as HTML to preserve semantics and styles
+                var c = document.createElement('div');
+                c.insertAdjacentHTML('afterbegin', properties.innerHTML);
+                geometry.bindPopup(c, {autoPan:false});
               }
             });
         }
@@ -548,12 +498,85 @@ M.MapMLLayer = L.Layer.extend({
         bounds.max = Math.max(v1,v2);
         return bounds;
     },
+    _setUpInputVars: function(inputs) {
+      // process the inputs and create an object named "extent"
+      // with member properties as follows:
+      // {width: {name: 'widthvarname'}, // value supplied by map if necessary
+      //  height: {name: 'heightvarname'}, // value supplied by map if necessary
+      //  left: {name: 'leftvarname', axis: 'leftaxisname'}, // axis name drives (coordinate system of) the value supplied by the map
+      //  right: {name: 'rightvarname', axis: 'rightaxisname'}, // axis name (coordinate system of) drives the value supplied by the map
+      //  top: {name: 'topvarname', axis: 'topaxisname'}, // axis name drives (coordinate system of) the value supplied by the map
+      //  bottom: {name: 'bottomvarname', axis: 'bottomaxisname'} // axis name drives (coordinate system of) the value supplied by the map
+      //  zoom: {name: 'zoomvarname'}
+      //  hidden: [{name: name, value: value}]}
+
+      var extentVarNames = {extent:{}};
+      extentVarNames.extent["hidden"] = [];
+      for (var i=0;i<inputs.length;i++) {
+        var type = inputs[i].getAttribute("type"), 
+            units = inputs[i].getAttribute("units"), 
+            axis = inputs[i].getAttribute("axis"), 
+            name = inputs[i].getAttribute("name"), 
+            position = inputs[i].getAttribute("position"),
+            value = inputs[i].getAttribute("value");
+        if (type === "width") {
+              extentVarNames.extent.width = {name: name};
+        } else if ( type === "height") {
+              extentVarNames.extent.height = {name: name};
+        } else if (type === "zoom") {
+              extentVarNames.extent.zoom = {name: name};
+        } else if (type === "location" && (units === "pcrs" || units ==="gcrs")) {
+          //<input name="..." units="pcrs" type="location" position="top|bottom-left|right" axis="northing|easting"/>
+          switch (axis) {
+            case ('easting'):
+              if (position) {
+                  if (position.match(/.*?-left/i)) {
+                    extentVarNames.extent.left = { name: name, axis: axis};
+                  } else if (position.match(/.*?-right/i)) {
+                    extentVarNames.extent.right = { name: name, axis: axis};
+                  }
+              }
+              break;
+            case ('northing'):
+              if (position) {
+                if (position.match(/top-.*?/i)) {
+                  extentVarNames.extent.top = { name: name, axis: axis};
+                } else if (position.match(/bottom-.*?/i)) {
+                  extentVarNames.extent.bottom = { name: name, axis: axis};
+                }
+              }
+              break;
+            case ('longitude'):
+              if (position) {
+                  if (position.match(/.*?-left/i)) {
+                    extentVarNames.extent.left = { name: name, axis: axis};
+                  } else if (position.match(/.*?-right/i)) {
+                    extentVarNames.extent.right = { name: name, axis: axis};
+                  }
+              }
+              break;
+            case ('latitude'):
+              if (position) {
+                if (position.match(/top-.*?/i)) {
+                  extentVarNames.extent.top = { name: name, axis: axis};
+                } else if (position.match(/bottom-.*?/i)) {
+                  extentVarNames.extent.bottom = { name: name, axis: axis};
+                }
+              }
+              break;
+          }
+        } else if (type === "hidden") {
+            extentVarNames.extent["hidden"].push({name: name, value: value});
+        }
+      }
+      return extentVarNames;
+    },
     // retrieve the (projected, scaled) layer extent for the current map zoom level
     getLayerExtentBounds: function(map) {
         
         if (!this._extent) return;
         var zoom = map.getZoom(), projection = map.options.projection,
-            ep = this._extent.querySelector('[type=projection]') ? this._extent.querySelector('[type=projection]').getAttribute('value') : this._extent.getAttribute("units"),
+            ep = this._extent.getAttribute("units"),
             projecting = (projection !== ep),
             p;
         
@@ -650,19 +673,19 @@ M.MapMLLayer = L.Layer.extend({
                     if (mapml.querySelector('feature,image,tile')) {
                         layer._content = mapml;
                     }
-                } else if (!serverExtent.hasAttribute("action") 
-                        && serverExtent.querySelector('template') 
-                        && serverExtent.hasAttribute("units") 
-                        && serverExtent.getAttribute("units") !== "WGS84") {
+                } else if (!serverExtent.hasAttribute("action") && 
+                        serverExtent.querySelector('link[rel=tile],link[rel=image],link[rel=query]') &&
+                        serverExtent.hasAttribute("units") &&
+                        (serverExtent.getAttribute("units") !== "WGS84")) {
                   layer._templateVars = [];
                   // set up the URL template and associated inputs (which yield variable values when processed)
-                  var tlist = serverExtent.querySelectorAll('template'),
+                  var tlist = serverExtent.querySelectorAll('link[rel=tile],link[rel=image],link[rel=query]'),
                       varNamesRe = (new RegExp('(?:\{)(.*?)(?:\})','g'));
                   for (var i=0;i< tlist.length;i++) {
                     var t = tlist[i],
                         template = t.getAttribute('tref'), v,
                         vcount=template.match(varNamesRe),
-                        ttype = (!t.hasAttribute('type') || t.getAttribute('type').toLowerCase() === 'tile') ? 'tile' : t.getAttribute('type').toLowerCase(),
+                        ttype = (!t.hasAttribute('rel') || t.getAttribute('rel').toLowerCase() === 'tile') ? 'tile' : t.getAttribute('rel').toLowerCase(),
                         inputs = [];
                     while ((v = varNamesRe.exec(template)) !== null) {
                       var varName = v[1],
@@ -710,8 +733,6 @@ M.MapMLLayer = L.Layer.extend({
                 }
                 if (layer._map) {
                     layer._validateExtent();
-                    var b = M.getBounds(layer._extent);
-
                     // if the layer is checked in the layer control, force the addition
                     // of the attribution just received
                     if (layer._map.hasLayer(layer)) {
@@ -768,16 +789,19 @@ M.MapMLLayer = L.Layer.extend({
                 var serverExtent = mapml.querySelector('extent');
                 if (!serverExtent) {
                     serverExtent = layer._synthesizeExtent(mapml);
-                } else if (!serverExtent.hasAttribute("action") && serverExtent.querySelector('template') && serverExtent.hasAttribute("units") && serverExtent.getAttribute("units") !== "WGS84") {
+                } else if (!serverExtent.hasAttribute("action") && 
+                        serverExtent.querySelector('link[rel=tile],link[rel=image],link[rel=query]') &&
+                        serverExtent.hasAttribute("units") &&
+                        (serverExtent.getAttribute("units") !== "WGS84")) {
                   layer._templateVars = [];
                   // set up the URL template and associated inputs (which yield variable values when processed)
-                  var tlist = serverExtent.querySelectorAll('template'),
+                  var tlist = serverExtent.querySelectorAll('link[rel=tile],link[rel=image],link[rel=query]'),
                       varNamesRe = (new RegExp('(?:\{)(.*?)(?:\})','g'));
                   for (i=0;i< tlist.length;i++) {
                     var t = tlist[i],
                         template = t.getAttribute('tref'), v,
                         vcount=template.match(varNamesRe),
-                        ttype = (!t.hasAttribute('type') || t.getAttribute('type').toLowerCase() === 'tile') ? 'tile' : t.getAttribute('type').toLowerCase(),
+                        ttype = (!t.hasAttribute('rel') || t.getAttribute('rel').toLowerCase() === 'tile') ? 'tile' : t.getAttribute('rel').toLowerCase(),
                         inputs = [];
                     while ((v = varNamesRe.exec(template)) !== null) {
                       var varName = v[1],
@@ -1134,6 +1158,7 @@ M.MapMLLayer = L.Layer.extend({
         if (!this._mapmlTileContainer && !this._extent) return this._href;
         var extent = this._extent;
         if (!extent) return this._href;
+        // action SHOULD HAVE BEEN resolved against any base ALREADY
         var action = extent.getAttribute("action"),
                 base = new URI(this._href);
         // establish the range of zoom values for the extent
@@ -1161,57 +1186,34 @@ M.MapMLLayer = L.Layer.extend({
         }
         
         if (!action || action === "synthetic") return null;
-        var b,
-            projection = extent.querySelectorAll('input[type=projection]')[0],
-            projectionValue = projection.getAttribute('value');
+        var b,projectionValue = extent.getAttribute('units');
         
         // if the mapml extent being processed is WGS84, we need to speak in those units
         if (projectionValue === 'WGS84') {
-            b = this._getUnprojectedMapLatLngBounds();
+          b = this._getUnprojectedMapLatLngBounds();
         } else {
-            // otherwise, use the bounds of the map
-            b = this._map.getPixelBounds();
+          // otherwise, use the bounds of the map
+          b = this._map.getPixelBounds();
+        }
+        var varnames = this._setUpInputVars(extent.querySelectorAll('input'));
+        
+        var queryParams = "";
+        values[varnames.extent.zoom.name] = mapZoom;
+        queryParams += varnames.extent.zoom.name+"={"+varnames.extent.zoom.name+"}&";
+        values[varnames.extent.left.name] = b.min?b.min.x:b.getWest();
+        queryParams += varnames.extent.left.name+"={"+varnames.extent.left.name+"}&";
+        values[varnames.extent.bottom.name] = b.min?b.min.y:b.getSouth();
+        queryParams += varnames.extent.bottom.name+"={"+varnames.extent.bottom.name+"}&";
+        values[varnames.extent.right.name] = b.max?b.max.x:b.getEast();
+        queryParams += varnames.extent.right.name+"={"+varnames.extent.right.name+"}&";
+        values[varnames.extent.top.name] = b.max?b.max.y:b.getNorth();
+        queryParams += varnames.extent.top.name+"={"+varnames.extent.top.name+"}"+(varnames.extent.hidden.length>0?"&":"");
+        for (var i=0;i<varnames.extent.hidden.length;i++) {
+          values[varnames.extent.hidden[i].name] = varnames.extent.hidden[i].value;
+          queryParams += varnames.extent.hidden[i].name+"={"+varnames.extent.hidden[i].name+"}"+(i<varnames.extent.hidden.length-1?"&":"");
         }
         
-        // retrieve the required extent inputs by type
-        var xmin = extent.querySelectorAll("input[type=xmin]")[0],
-            ymin = extent.querySelectorAll("input[type=ymin]")[0],
-            xmax = extent.querySelectorAll("input[type=xmax]")[0],
-            ymax = extent.querySelectorAll("input[type=ymax]")[0];
-        
-        // if even one of them doesn't exist, we're snookered
-        if (!xmin|| !ymin || !xmax || !ymax ) return  null;
-        
-        // use the @name as the name of the variable to transmit, or the @type value by default
-        var xminName = (xmin.getAttribute('name')?xmin.getAttribute('name').trim():'xmin');
-        var yminName = (ymin.getAttribute('name')?ymin.getAttribute('name').trim():'ymin');
-        var xmaxName = (xmax.getAttribute('name')?xmax.getAttribute('name').trim():'xmax');
-        var ymaxName = (ymax.getAttribute('name')?ymax.getAttribute('name').trim():'ymax');
-        
-        // generate a URI template for the extent request using the variable names above
-        var bboxTemplate = "";
-        bboxTemplate += xminName + "={" + xminName + "}" + "&";
-        bboxTemplate += yminName + "={" + yminName + "}" + "&";
-        bboxTemplate += xmaxName + "={" + xmaxName + "}" + "&";
-        bboxTemplate += ymaxName + "={" + ymaxName + "}";
-        
-        // establish the range of zoom values for the extent
-        if (!projection) return null;
-
-        var zoomName = zoom.getAttribute('name')?zoom.getAttribute('name').trim():'zoom';
-        var zoomTemplate = zoomName + "={" + zoomName + "}";
-
-        values.xmin = b.min?b.min.x:b.getWest();
-        values.ymin = b.min?b.min.y:b.getSouth();
-        values.xmax = b.max?b.max.x:b.getEast();
-        values.ymax = b.max?b.max.y:b.getNorth();
-        values.projection = projectionValue;
-        
-        var projectionName = projection.getAttribute('name')?projection.getAttribute('name').trim():'projection';
-        var projectionTemplate = projectionName + "={" + projectionName + "}";
-        
-        var requestTemplate = bboxTemplate + "&" + zoomTemplate + "&" + projectionTemplate;
-        action += ((action.search(/\?/g) === -1) ? "?" : "&") + requestTemplate;
+        action += "?"+queryParams;
         var rel = new URI(action).resolve(base).toString();
         return L.Util.template(rel, values);
     },
@@ -2205,27 +2207,30 @@ M.MapMLFeatures = L.FeatureGroup.extend({
           }
     },
 
-    addData: function (mapml) {
+addData: function (mapml) {
 		var features = mapml.nodeType === Node.DOCUMENT_NODE || mapml.nodeName === "LAYER-" ? mapml.getElementsByTagName("feature") : null,
 		    i, len, feature;
             
-                var stylesheet = mapml.nodeType === Node.DOCUMENT_NODE ? mapml.querySelector("link[rel=stylesheet]") : null;
-                if (stylesheet) {
-                  
-                    var baseEl = mapml.querySelector('base'),
-                          base = new URI(baseEl?baseEl.getAttribute('href'):mapml.baseURI),
-                          link = new URI(stylesheet.getAttribute('href'));
-                          stylesheet = link.resolve(base).toString();
-                }
-                if (stylesheet) {
-                  if (!document.head.querySelector("link[href='"+stylesheet+"']")) {
-                    var linkElm = document.createElementNS("http://www.w3.org/1999/xhtml", "link");
-                    linkElm.setAttribute("href", stylesheet);
-                    linkElm.setAttribute("type", "text/css");
-                    linkElm.setAttribute("rel", "stylesheet");
-                    document.head.appendChild(linkElm);
-                  }
-                }
+  var stylesheets = mapml.nodeType === Node.DOCUMENT_NODE ? mapml.querySelectorAll("link[rel=stylesheet]") : null;
+  if (stylesheets) {
+    for (i=0;i < stylesheets.length;i++) {
+      
+      var baseEl = mapml.querySelector('base'),
+          stylesheet = stylesheets[i],
+        base = new URI(baseEl?baseEl.getAttribute('href'):mapml.baseURI),
+        link = new URI(stylesheet.getAttribute('href'));
+        stylesheet = link.resolve(base).toString();
+      if (stylesheet) {
+        if (!document.head.querySelector("link[href='"+stylesheet+"']")) {
+          var linkElm = document.createElementNS("http://www.w3.org/1999/xhtml", "link");
+          linkElm.setAttribute("href", stylesheet);
+          linkElm.setAttribute("type", "text/css");
+          linkElm.setAttribute("rel", "stylesheet");
+          document.head.appendChild(linkElm);
+        }
+      }
+    }
+  }
 
 		if (features) {
 			for (i = 0, len = features.length; i < len; i++) {
@@ -2255,7 +2260,7 @@ M.MapMLFeatures = L.FeatureGroup.extend({
 		}
 
 		return this.addLayer(layer);
-	},
+},
         
 	resetStyle: function (layer) {
 		var style = this.options.style;
@@ -2472,7 +2477,7 @@ M.MapMLLayerControl = L.Control.Layers.extend({
                 projectionMatches = obj.layer._projectionMatches(this._map);
                 //the bounds intersecting the layer extent bounds is used to
                 // disable/enable the layer in the layer control
-                visible = projectionMatches && this._withinZoomBounds(zoom, zoomBounds) && bounds.intersects(obj.layer.getLayerExtentBounds(this._map)) ;
+                visible = projectionMatches && this._withinZoomBounds(zoom, zoomBounds); // && bounds.intersects(obj.layer.getLayerExtentBounds(this._map)) ;
                 if (!visible) {
                     obj.input.disabled = true;
                     if (!projectionMatches) {

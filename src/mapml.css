@@ -17,7 +17,7 @@
         visibility: inherit;
         }
 .mapml-popup-overflow {
-        overflow: auto;
+        overflow: hidden;
         }
 /* this is to indent the nested details in the layer control */
 /* details/summary is in progress 2018-03-02 on ms-edge so gonna rely on that...
@@ -26,4 +26,14 @@
         margin-left: 1em;
           
         }
-
+.leaflet-control-layers details.mapml-control-layers > * {
+        margin-left: 0;
+        margin-right: 0;
+        }
+.leaflet-control-layers details.mapml-control-layers > input {
+        margin-left: 1em;
+        width: 90%
+        }
+.leaflet-popup.mapml-popup-overflow th {
+  position: relative;
+}
