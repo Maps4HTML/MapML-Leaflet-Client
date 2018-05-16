@@ -498,6 +498,31 @@ M.MapMLLayer = L.Layer.extend({
         bounds.max = Math.max(v1,v2);
         return bounds;
     },
+    _transformDeprectatedInput: function (i) {
+      var type = i.getAttribute("type").toLowerCase();
+      if (type === "xmin" || type === "ymin" || type === "xmax" || type === "ymax") {
+        i.setAttribute("type", "location");
+        i.setAttribute("units","tcrs");
+        switch (type) {
+          case "xmin":
+            i.setAttribute("axis","x");
+            i.setAttribute("position","top-left");
+            break;
+          case "ymin":
+            i.setAttribute("axis","y");
+            i.setAttribute("position","top-left");
+            break;
+          case "xmax":
+            i.setAttribute("axis","x");
+            i.setAttribute("position","bottom-right");
+            break;
+          case "ymax":
+            i.setAttribute("axis","y");
+            i.setAttribute("position","bottom-right");
+            break;
+        }
+      } 
+    },
     _setUpInputVars: function(inputs) {
       // process the inputs and create an object named "extent"
       // with member properties as follows:
@@ -513,6 +538,8 @@ M.MapMLLayer = L.Layer.extend({
       var extentVarNames = {extent:{}};
       extentVarNames.extent.hidden = [];
       for (var i=0;i<inputs.length;i++) {
+        // this can be removed when the spec removes the deprecated inputs...
+        this._transformDeprectatedInput(inputs[i]);
         var type = inputs[i].getAttribute("type"), 
             units = inputs[i].getAttribute("units"), 
             axis = inputs[i].getAttribute("axis"), 
@@ -525,7 +552,7 @@ M.MapMLLayer = L.Layer.extend({
               extentVarNames.extent.height = {name: name};
         } else if (type === "zoom") {
               extentVarNames.extent.zoom = {name: name};
-        } else if (type === "location" && (units === "pcrs" || units ==="gcrs")) {
+        } else if (type === "location" && (units === "pcrs" || units ==="gcrs" || units === "tcrs")) {
           //<input name="..." units="pcrs" type="location" position="top|bottom-left|right" axis="northing|easting"/>
           switch (axis) {
             case ('easting'):
@@ -538,6 +565,24 @@ M.MapMLLayer = L.Layer.extend({
               }
               break;
             case ('northing'):
+              if (position) {
+                if (position.match(/top-.*?/i)) {
+                  extentVarNames.extent.top = { name: name, axis: axis};
+                } else if (position.match(/bottom-.*?/i)) {
+                  extentVarNames.extent.bottom = { name: name, axis: axis};
+                }
+              }
+              break;
+            case ('x'):
+              if (position) {
+                  if (position.match(/.*?-left/i)) {
+                    extentVarNames.extent.left = { name: name, axis: axis};
+                  } else if (position.match(/.*?-right/i)) {
+                    extentVarNames.extent.right = { name: name, axis: axis};
+                  }
+              }
+              break;
+            case ('y'):
               if (position) {
                 if (position.match(/top-.*?/i)) {
                   extentVarNames.extent.top = { name: name, axis: axis};
@@ -565,7 +610,8 @@ M.MapMLLayer = L.Layer.extend({
               }
               break;
           }
-        } else if (type === "hidden") {
+          // projection is deprecated, make it hidden
+        } else if (type === "hidden" || type === "projection") {
             extentVarNames.extent.hidden.push({name: name, value: value});
         }
       }
@@ -1202,11 +1248,11 @@ M.MapMLLayer = L.Layer.extend({
         queryParams += varnames.extent.zoom.name+"={"+varnames.extent.zoom.name+"}&";
         values[varnames.extent.left.name] = b.min?b.min.x:b.getWest();
         queryParams += varnames.extent.left.name+"={"+varnames.extent.left.name+"}&";
-        values[varnames.extent.bottom.name] = b.min?b.min.y:b.getSouth();
+        values[varnames.extent.bottom.name] = b.max?b.max.y:b.getSouth();
         queryParams += varnames.extent.bottom.name+"={"+varnames.extent.bottom.name+"}&";
         values[varnames.extent.right.name] = b.max?b.max.x:b.getEast();
         queryParams += varnames.extent.right.name+"={"+varnames.extent.right.name+"}&";
-        values[varnames.extent.top.name] = b.max?b.max.y:b.getNorth();
+        values[varnames.extent.top.name] = b.min?b.min.y:b.getNorth();
         queryParams += varnames.extent.top.name+"={"+varnames.extent.top.name+"}"+(varnames.extent.hidden.length>0?"&":"");
         for (var i=0;i<varnames.extent.hidden.length;i++) {
           values[varnames.extent.hidden[i].name] = varnames.extent.hidden[i].value;
