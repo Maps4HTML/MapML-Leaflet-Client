@@ -16,12 +16,17 @@
            aren't matching inputs and variable references. So the client needs
            to supply an input@name=s if they want to use the hardcoding, or provide
            a literal value of host name if necessary for the host.domain.tld in the template -->
-      <input name="s" type="hidden" value="abc"/>
+      <input name="srvr" type="hidden" shard="true" list="servers"/>
+      <datalist id="servers">
+        <option value="a"/>
+        <option value="b"/>
+        <option value="c"/>
+      </datalist>
       <input name="xmn" type="location" position="top-left" axis="x"  min="0.0" max="256.0"/>
       <input name="ymn" type="location"  position="top-left" axis="y"  min="0.0" max="256.0"/>
       <input name="xmx" type="location" position="bottom-right" axis="x" min="0.0" max="256.0"/>
       <input name="ymx" type="location"  position="bottom-right" axis="y" min="0.0" max="256.0"/>
-      <link rel="tile" tref="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"/>
+      <link rel="tile" tref="https://{srvr}.tile.openstreetmap.org/{z}/{x}/{y}.png"/>
     </extent>
   </body>
 </mapml>

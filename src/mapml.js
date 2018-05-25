@@ -730,6 +730,7 @@ M.MapMLLayer = L.Layer.extend({
                   for (var i=0;i< tlist.length;i++) {
                     var t = tlist[i],
                         template = t.getAttribute('tref'), v,
+                        title = t.hasAttribute('title') ? t.getAttribute('title') : 'Query this layer',
                         vcount=template.match(varNamesRe),
                         ttype = (!t.hasAttribute('rel') || t.getAttribute('rel').toLowerCase() === 'tile') ? 'tile' : t.getAttribute('rel').toLowerCase(),
                         inputs = [];
@@ -738,6 +739,21 @@ M.MapMLLayer = L.Layer.extend({
                       inp = serverExtent.querySelector('input[name='+varName+']');
                       if (inp) {
                         inputs.push(inp);
+                        if (inp.hasAttribute('shard')) {
+                          var id = inp.getAttribute('list');
+                          inp.servers = [];
+                          let servers = serverExtent.querySelectorAll('datalist#'+id + ' > option');
+                          if (servers.length === 0 && inp.hasAttribute('value')) {
+                            servers = inp.getAttribute('value').split('');
+                          }
+                          for (var s=0;s < servers.length;s++) {
+                            if (servers[s].getAttribute) {
+                              inp.servers.push(servers[s].getAttribute('value'));
+                            } else {
+                              inp.servers.push(servers[s]);
+                            }
+                          }
+                        }
                         // TODO: if this is an input@type=location 
                         // get the TCRS min,max attribute values at the identified zoom level 
                         // save this information as properties of the serverExtent,
@@ -752,7 +768,7 @@ M.MapMLLayer = L.Layer.extend({
                     }
                     if (template && vcount.length === inputs.length) {
                       // template has a matching input for every variable reference {varref}
-                      layer._templateVars.push({template:template, type: ttype, values: inputs});
+                      layer._templateVars.push({template:template, title:title, type: ttype, values: inputs});
                     }
                   }
                 }
@@ -1563,6 +1579,7 @@ M.TemplatedLayer = L.Layer.extend({
       //  x: 'xvarname' x being the tcrs x axis
       //  y: 'yvarname' y being the tcrs y axis
       //  z: 'zvarname' zoom
+      //  title: link title
 
       var queryVarNames = {query:{}},
           inputs = template.values;
@@ -1628,6 +1645,7 @@ M.TemplatedLayer = L.Layer.extend({
            };
         }
       }
+      queryVarNames.query.title = template.title;
       return queryVarNames;
   },
   reset: function (templates) {
@@ -1722,21 +1740,22 @@ M.TemplatedLayer = L.Layer.extend({
               obj[v] = template.query[v];
           }
       }
-      fetch(L.Util.template(template.template, obj),{redirect: 'follow'}).then(
-          function(response) {
-            if (response.status !== 200) {
-              console.log('Looks like there was a problem. Status Code: ' +
-                response.status);
-            }
-
-             //Examine the text in the response
-            return response.text();
-          }
-        ).then(function(data) {
-              popup.setContent(data);
-        }).catch(function(err) {
-          console.log('Fetch Error :-S', err);
-        });
+      popup.setContent('<a target="_blank" href="'+L.Util.template(template.template, obj)+'">'+template.query.title+'</a>');
+//      fetch(L.Util.template(template.template, obj),{redirect: 'follow'}).then(
+//          function(response) {
+//            if (response.status !== 200) {
+//              console.log('Looks like there was a problem. Status Code: ' +
+//                response.status);
+//            }
+//
+//             //Examine the text in the response
+//            return response.text();
+//          }
+//        ).then(function(data) {
+//              popup.setContent(data);
+//        }).catch(function(err) {
+//          console.log('Fetch Error :-S', err);
+//        });
       
       popup.setLatLng(e.latlng).openOn(map);
     }
@@ -1809,13 +1828,13 @@ M.TemplatedTileLayer = L.TileLayer.extend({
         obj[this.options.tile.right] = this._tileMatrixToPCRSPosition(coords, 'top-right').x;
         obj[this.options.tile.top] = this._tileMatrixToPCRSPosition(coords, 'top-left').y;
         obj[this.options.tile.bottom] = this._tileMatrixToPCRSPosition(coords, 'bottom-left').y;
+        obj[this.options.tile.server] = this._getSubdomain(coords);
         for (var v in this.options.tile) {
             if (["row","col","zoom","left","right","top","bottom"].indexOf(v) < 0) {
                 obj[v] = this.options.tile[v];
             }
         }
         obj.r = this.options.detectRetina && L.Browser.retina && this.options.maxZoom > 0 ? '@2x' : '';
-        obj.s = this._getSubdomain(coords);  // this is hard-coded, should add an input@type for this?
         return L.Util.template(this._url, obj);
     },
     _tileMatrixToPCRSPosition: function (coords, pos) {
@@ -1903,7 +1922,8 @@ M.TemplatedTileLayer = L.TileLayer.extend({
             axis = inputs[i].getAttribute("axis"), 
             name = inputs[i].getAttribute("name"), 
             position = inputs[i].getAttribute("position"),
-            value = inputs[i].getAttribute("value");
+            value = inputs[i].getAttribute("value"),
+            shard = (type === "hidden" && inputs[i].hasAttribute("shard"));
         if (type === "location" && units === "tilematrix") {
           switch (axis) {
             case("column"):
@@ -1936,6 +1956,9 @@ M.TemplatedTileLayer = L.TileLayer.extend({
         } else if (type === "zoom") {
           //<input name="..." type="zoom" value="0" min="0" max="17"/>
            tileVarNames.tile.zoom = name;
+        } else if (shard) {
+          tileVarNames.tile.server = name;
+          tileVarNames.subdomains = inputs[i].servers.slice();
         } else {
            // needs to be a const otherwise it gets overwritten
           /*jshint -W104 */
