@@ -423,7 +423,6 @@ M.MapMLLayer = L.Layer.extend({
             if (this._templateVars) {
               this._templatedLayer = M.templatedLayer(this._templateVars, {pane: this._container}).addTo(map);
             }
-            this._onMoveEnd();
         } else {
             this.once('extentload', function() {
                 if (this._templateVars) {
@@ -680,6 +679,7 @@ M.MapMLLayer = L.Layer.extend({
         // referred to by this._content), we should use that content.
         if (this._href) {
             var xhr = new XMLHttpRequest();
+            xhr.withCredentials = true;
             _get(this._href, _processInitialExtent);
         } else if (content) {
             // may not set this._extent if it can't be done from the content
@@ -742,7 +742,7 @@ M.MapMLLayer = L.Layer.extend({
                         if (inp.hasAttribute('shard')) {
                           var id = inp.getAttribute('list');
                           inp.servers = [];
-                          let servers = serverExtent.querySelectorAll('datalist#'+id + ' > option');
+                          var servers = serverExtent.querySelectorAll('datalist#'+id + ' > option');
                           if (servers.length === 0 && inp.hasAttribute('value')) {
                             servers = inp.getAttribute('value').split('');
                           }
@@ -775,6 +775,7 @@ M.MapMLLayer = L.Layer.extend({
                 layer._parseLicenseAndLegend(mapml, layer);
                 layer._extent = serverExtent;
                 
+                
                 var zoomin = mapml.querySelector('link[rel=zoomin]'),
                     zoomout = mapml.querySelector('link[rel=zoomout]'),
                     base = (new URI(mapml.querySelector('base') ? mapml.querySelector('base').getAttribute('href') : null || this.responseURL)).resolve(new URI(this.responseURL));
@@ -788,6 +789,39 @@ M.MapMLLayer = L.Layer.extend({
                 }
                 if (layer._templatedLayer) {
                   layer._templatedLayer.reset(layer._templateVars);
+                }
+                var styleLinks = mapml.querySelectorAll('link[rel=style],link[rel="self style"],link[rel="style self"]');
+                if (styleLinks.length > 1) {
+                  var stylesControl = document.createElement('details'),
+                  stylesControlSummary = document.createElement('summary');
+                  stylesControlSummary.innerText = 'style';
+                  stylesControl.appendChild(stylesControlSummary);
+
+                  for (var j=0;j<styleLinks.length;j++) {
+                    var styleOption = document.createElement('span'),
+                    styleOptionInput = styleOption.appendChild(document.createElement('input'));
+                    styleOptionInput.setAttribute("type", "radio");
+                    styleOptionInput.setAttribute("id", "rad"+j);
+                    styleOptionInput.setAttribute("name", "styles");
+                    styleOptionInput.setAttribute("value", styleLinks[j].getAttribute('title'));
+                    styleOptionInput.setAttribute("data-href", new URI(styleLinks[j].getAttribute('href')).resolve(base).toString());
+                    var styleOptionLabel = styleOption.appendChild(document.createElement('label'));
+                    styleOptionLabel.setAttribute("for", "rad"+j);
+                    styleOptionLabel.innerText = styleLinks[j].getAttribute('title');
+                    if (styleLinks[j].getAttribute("rel") === "style self" || styleLinks[j].getAttribute("rel") === "self style") {
+                      styleOptionInput.checked = true;
+                    }
+                    stylesControl.appendChild(styleOption);
+                    L.DomUtil.addClass(stylesControl,'mapml-control-layers');
+                    L.DomEvent.on(styleOptionInput,'click', function (e) {
+                      this._href = e.target.getAttribute("data-href");
+                      this._reset();
+                      this._initExtent();
+                    }, layer);
+
+
+                  }
+                  layer._styles = stylesControl;
                 }
                 
                 if (mapml.querySelector('title')) {
@@ -813,6 +847,7 @@ M.MapMLLayer = L.Layer.extend({
         if (url) {
             var requestCounter = 0;
             var xhr = new XMLHttpRequest();
+            xhr.withCredentials = true;
             // add a listener to terminate pulling the feed 
             this._map.once('movestart', function() {
               xhr.abort();
@@ -2565,6 +2600,15 @@ M.MapMLLayerControl = L.Control.Layers.extend({
             }
         }
     },
+    _addStyleSelector: function(e) {
+      var obj;
+      for (var i = 0; i < this._layers.length; i++) {
+        obj = this._layers[i];
+        if (e.target === obj.layer && obj.layer._styles) {
+            obj.input.closest('details').appendChild(obj.layer._styles);
+        }
+      }
+    },
     _addMiscInputs: function(e) {
       var obj;
       for (var i = 0; i < this._layers.length; i++) {
@@ -2574,7 +2618,7 @@ M.MapMLLayerControl = L.Control.Layers.extend({
           if (requiredTemplateControls) {
             obj.input.closest('details').appendChild(requiredTemplateControls);
           }
-        } 
+        }
       }
     },
     _generateControlElements: function (layer) {
@@ -2678,6 +2722,11 @@ M.MapMLLayerControl = L.Control.Layers.extend({
         // verify the extent and legend for the layer to know whether to
         // disable it , add the legend link etc.
         obj.layer.on('extentload', this._validateExtents, this);
+        if (obj.layer._styles) {
+          Polymer.dom(details).appendChild(obj.layer._styles);
+        } else {
+          obj.layer.once('extentload', this._addStyleSelector, this);
+        }
         obj.layer.once('extentload', this._addMiscInputs, this);
 
         return label;
