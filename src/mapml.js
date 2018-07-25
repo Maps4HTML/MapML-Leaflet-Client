@@ -327,7 +327,7 @@ M.MapMLLayer = L.Layer.extend({
         
         // this layer 'owns' a mapmlTileLayer, which is a subclass of L.GridLayer
         // it 'passes' what tiles to load via the content of this._mapmlTileContainer
-        this._mapmlTileContainer = L.DomUtil.create('div', 'mapml-tile-container');
+        this._mapmlTileContainer = L.DomUtil.create('div', 'mapml-tile-container', this._container);
         // hit the service to determine what its extent might be
         // OR use the extent of the content provided
         this._initCount = 0;
@@ -670,6 +670,93 @@ M.MapMLLayer = L.Layer.extend({
     getAttribution: function () {
         return this.options.attribution;
     },
+    getLayerUserControlsHTML: function () {
+      var label = document.createElement('label'),
+        input = document.createElement('input'),
+        name = document.createElement('span'),
+        details = document.createElement('details'),
+        summary = document.createElement('summary'),
+        opacity = document.createElement('input'),
+        opacityControl = document.createElement('details'),
+        opacityControlSummary = document.createElement('summary');
+
+        input.defaultChecked = this._map ? true: false;
+        input.type = 'checkbox';
+        input.className = 'leaflet-control-layers-selector';
+
+//      this._layerControlInputs.push(input);
+
+//      L.DomEvent.on(input, 'click', this._onInputClick, this);
+
+
+        if (this._legendUrl) {
+          var legendLink = document.createElement('a');
+          legendLink.text = ' ' + this._title;
+          legendLink.href = this._legendUrl;
+          legendLink.target = '_blank';
+          name.appendChild(legendLink);
+        } else {
+          name.innerHTML = ' ' + this._title;
+        }
+        
+        opacityControlSummary.innerText = 'opacity';
+        opacityControl.appendChild(opacityControlSummary);
+        opacityControl.appendChild(opacity);
+        L.DomUtil.addClass(details, 'mapml-control-layers');
+        L.DomUtil.addClass(opacityControl,'mapml-control-layers');
+        opacity.setAttribute('type','range');
+        opacity.setAttribute('min', '0');
+        opacity.setAttribute('max','1.0');
+        opacity.setAttribute('value', '1.0');
+        opacity.setAttribute('step','0.1');
+
+        L.DomEvent.on(opacity,'change', this._changeOpacity, this);
+
+        Polymer.dom(details).appendChild(summary);
+        Polymer.dom(label).appendChild(details);
+        Polymer.dom(summary).appendChild(input);
+        Polymer.dom(summary).appendChild(name);
+        Polymer.dom(details).appendChild(opacityControl);
+
+//        var container = this._overlaysList;
+//        Polymer.dom(container).appendChild(label);
+//        
+        // this is necessary because when there are several layers in the
+        // layer control, the response to the last one can be a long time
+        // after the info is first displayed, so we have to go back and
+        // verify the extent and legend for the layer to know whether to
+        // disable it , add the legend link etc.
+//        obj.layer.on('extentload', this._validateExtents, this);
+        if (this._styles) {
+          Polymer.dom(details).appendChild(this._styles);
+        }
+        if (this._userInputs) {
+          var frag = document.createDocumentFragment();
+          var templates = this._templateVars;
+          if (templates) {
+            for (var i=0;i<templates.length;i++) {
+              var template = templates[i];
+              for (var j=0;j<template.values.length;j++) {
+                var mapmlInput = template.values[j],
+                    id = '#'+mapmlInput.getAttribute('id');
+                // don't add it again if it is referenced > once
+                if (mapmlInput.tagName.toLowerCase() === 'select' && !frag.querySelector(id)) {
+                  // generate a <details><summary></summary><input...></details>
+                  var selectdetails = document.createElement('details'),
+                      selectsummary = document.createElement('summary');
+                      selectsummary.innerText = mapmlInput.getAttribute('name');
+                      L.DomUtil.addClass(selectdetails, 'mapml-control-layers');
+                      selectdetails.appendChild(selectsummary);
+                      selectdetails.appendChild(mapmlInput.htmlselect);
+                  frag.appendChild(selectdetails);
+                }
+              }
+            }
+          }
+          Polymer.dom(details).appendChild(frag);
+        }
+        return label;
+    },
     _initExtent: function(content) {
         if (!this._href && !content) {return;}
         var layer = this;
@@ -736,7 +823,7 @@ M.MapMLLayer = L.Layer.extend({
                         inputs = [];
                     while ((v = varNamesRe.exec(template)) !== null) {
                       var varName = v[1],
-                      inp = serverExtent.querySelector('input[name='+varName+']');
+                      inp = serverExtent.querySelector('input[name='+varName+'],select[name='+varName+']');
                       if (inp) {
                         inputs.push(inp);
                         if (inp.hasAttribute('shard')) {
@@ -753,6 +840,18 @@ M.MapMLLayer = L.Layer.extend({
                               inp.servers.push(servers[s]);
                             }
                           }
+                        } else if (inp.tagName.toLowerCase() === 'select') {
+                          // use a throwaway div to parse the input from MapML into HTML
+                          var div =document.createElement("div");
+                          div.insertAdjacentHTML("afterbegin",inp.outerHTML);
+                          // parse
+                          inp.htmlselect = div.querySelector("select");
+                          // this goes into the layer control, so add a listener
+                          L.DomEvent.on(inp.htmlselect, 'change', layer.redraw, layer);
+                          if (!layer._userInputs) {
+                            layer._userInputs = [];
+                          }
+                          layer._userInputs.push(inp.htmlselect);
                         }
                         // TODO: if this is an input@type=location 
                         // get the TCRS min,max attribute values at the identified zoom level 
@@ -796,6 +895,9 @@ M.MapMLLayer = L.Layer.extend({
                   stylesControlSummary = document.createElement('summary');
                   stylesControlSummary.innerText = 'style';
                   stylesControl.appendChild(stylesControlSummary);
+                  var changeStyle = function (e) {
+                      layer.fire('changestyle', {label: e.target.value, src: e.target.getAttribute("data-href")}, false);
+                  };
 
                   for (var j=0;j<styleLinks.length;j++) {
                     var styleOption = document.createElement('span'),
@@ -813,19 +915,13 @@ M.MapMLLayer = L.Layer.extend({
                     }
                     stylesControl.appendChild(styleOption);
                     L.DomUtil.addClass(stylesControl,'mapml-control-layers');
-                    L.DomEvent.on(styleOptionInput,'click', function (e) {
-                      this._href = e.target.getAttribute("data-href");
-                      this._reset();
-                      this._initExtent();
-                    }, layer);
-
-
+                    L.DomEvent.on(styleOptionInput,'click', changeStyle, layer);
                   }
                   layer._styles = stylesControl;
                 }
                 
                 if (mapml.querySelector('title')) {
-                  layer._title = mapml.querySelector('title').textContent;
+                  layer._title = mapml.querySelector('title').textContent.trim();
                 }
                 if (layer._map) {
                     layer._validateExtent();
@@ -1232,6 +1328,7 @@ M.MapMLLayer = L.Layer.extend({
     },
     _reset: function() {
         this._initEl();
+        L.empty(this._container);
         this._mapmlvectors.clearLayers();
         //this._map.removeLayer(this._mapmlvectors);
         return;
@@ -1519,7 +1616,7 @@ M.TemplatedImageLayer =  L.Layer.extend({
             axis = inputs[i].getAttribute("axis"), 
             name = inputs[i].getAttribute("name"), 
             position = inputs[i].getAttribute("position"),
-            value = inputs[i].getAttribute("value");
+            select = (inputs[i].tagName.toLowerCase() === "select");
         if (type === "width") {
               extentVarNames.extent.width = name;
         } else if ( type === "height") {
@@ -1546,6 +1643,12 @@ M.TemplatedImageLayer =  L.Layer.extend({
               }
               break;
           }
+        } else if (select) {
+            /*jshint -W104 */
+          const parsedselect = inputs[i].htmlselect;
+          extentVarNames.extent[name] = function() {
+              return parsedselect.value;
+          };
         } else {
             /*jshint -W104 */
             const input = inputs[i];
@@ -1625,7 +1728,7 @@ M.TemplatedLayer = L.Layer.extend({
             axis = inputs[i].getAttribute("axis"), 
             name = inputs[i].getAttribute("name"), 
             position = inputs[i].getAttribute("position"),
-            value = inputs[i].getAttribute("value");
+            select = (inputs[i].tagName.toLowerCase() === "select");
         if (type === "width") {
               queryVarNames.query.width = name;
         } else if ( type === "height") {
@@ -1672,6 +1775,12 @@ M.TemplatedLayer = L.Layer.extend({
         } else if (type === "zoom") {
           //<input name="..." type="zoom" value="0" min="0" max="17"/>
            queryVarNames.query.zoom = name;
+        } else if (select) {
+            /*jshint -W104 */
+          const parsedselect = inputs[i].htmlselect;
+          queryVarNames.query[name] = function() {
+              return parsedselect.value;
+          };
         } else {
             /*jshint -W104 */
             const input = inputs[i];
@@ -1685,6 +1794,7 @@ M.TemplatedLayer = L.Layer.extend({
   },
   reset: function (templates) {
     if (!templates) {return;}
+    if (!this._map) {return;}
     var addToMap = this._map && this._map.hasLayer(this),
         old_templates = this._templates;
     delete this._queries;
@@ -1957,8 +2067,8 @@ M.TemplatedTileLayer = L.TileLayer.extend({
             axis = inputs[i].getAttribute("axis"), 
             name = inputs[i].getAttribute("name"), 
             position = inputs[i].getAttribute("position"),
-            value = inputs[i].getAttribute("value"),
-            shard = (type === "hidden" && inputs[i].hasAttribute("shard"));
+            shard = (type === "hidden" && inputs[i].hasAttribute("shard")),
+            select = (inputs[i].tagName.toLowerCase() === "select");
         if (type === "location" && units === "tilematrix") {
           switch (axis) {
             case("column"):
@@ -1994,6 +2104,12 @@ M.TemplatedTileLayer = L.TileLayer.extend({
         } else if (shard) {
           tileVarNames.tile.server = name;
           tileVarNames.subdomains = inputs[i].servers.slice();
+        } else if (select) {
+            /*jshint -W104 */
+          const parsedselect = inputs[i].htmlselect;
+          tileVarNames.tile[name] = function() {
+              return parsedselect.value;
+          };
         } else {
            // needs to be a const otherwise it gets overwritten
           /*jshint -W104 */
@@ -2521,7 +2637,11 @@ M.mapMlFeatures = function (mapml, options) {
 M.MapMLLayerControl = L.Control.Layers.extend({
     /* removes 'base' layers as a concept */
     options: {
-      autoZIndex: false
+      autoZIndex: false,
+      sortLayers: true,
+      sortFunction: function (layerA, layerB) {
+        return layerA.options.zIndex < layerB.options.zIndex ? -1 : (layerA.options.zIndex > layerB.options.zIndex ? 1 : 0);
+      }
     },
     initialize: function (overlays, options) {
         L.setOptions(this, options);
@@ -2534,7 +2654,7 @@ M.MapMLLayerControl = L.Control.Layers.extend({
         this._handlingClick = false;
 
         for (var i in overlays) {
-                this._addLayer(overlays[i], i, true);
+            this._addLayer(overlays[i], i, true);
         }
     },
     onAdd: function () {
@@ -2554,18 +2674,19 @@ M.MapMLLayerControl = L.Control.Layers.extend({
         }
     },
     addOrUpdateOverlay: function (layer, name) {
-     var alreadyThere = false;
-     for (var i=0;i<this._layers.length;i++) {
-       if (this._layers[i].layer === layer) {
-         alreadyThere = true;
-         this._layers[i].name = name;
-         break;
-       }
-     }
-     if (!alreadyThere) {
-       this._addLayer(layer, name, true);
-     }
-     return (this._map) ? this._update() : this;
+      var alreadyThere = false;
+      for (var i=0;i<this._layers.length;i++) {
+        if (this._layers[i].layer === layer) {
+          alreadyThere = true;
+          this._layers[i].name = name;
+          // replace the controls with updated controls if necessary.
+          break;
+        }
+      }
+      if (!alreadyThere) {
+        this.addOverlay(layer, name);
+      }
+      return (this._map) ? this._update() : this;
     },
     _validateExtents: function (e) {
         // get the bounds of the map in Tiled CRS pixel units
@@ -2596,140 +2717,31 @@ M.MapMLLayerControl = L.Control.Layers.extend({
                     // ie does not work with null 
                     obj.input.nextElementSibling.style.fontStyle = '';
                 }
-                this._setLegendLink(obj,obj.input.nextElementSibling);
             }
         }
-    },
-    _addStyleSelector: function(e) {
-      var obj;
-      for (var i = 0; i < this._layers.length; i++) {
-        obj = this._layers[i];
-        if (e.target === obj.layer && obj.layer._styles) {
-            obj.input.closest('details').appendChild(obj.layer._styles);
-        }
-      }
-    },
-    _addMiscInputs: function(e) {
-      var obj;
-      for (var i = 0; i < this._layers.length; i++) {
-        obj = this._layers[i];
-        if (e.target === obj.layer && obj.layer._templateVars) {
-          var requiredTemplateControls = this._generateControlElements(obj.layer);
-          if (requiredTemplateControls) {
-            obj.input.closest('details').appendChild(requiredTemplateControls);
-          }
-        }
-      }
-    },
-    _generateControlElements: function (layer) {
-      var frag = document.createDocumentFragment();
-      function propagateInputChange(e) {
-            scopedInput.setAttribute('value', e.target.value);
-            layer.redraw();
-      }
-      var templates = layer._templateVars;
-      for (var i=0;i<templates.length;i++) {
-        if (templates[i].type ===  'tile' || templates[i].type === 'image') {
-          var template = templates[i];
-          for (var j=0;j<template.values.length;j++) {
-            var mapmlInput = template.values[j];
-            if (mapmlInput.getAttribute('type') === 'datetime') {
-              // generate a <details><summary></summary><input...></details>
-              var deets = document.createElement('details'),
-                  summary = document.createElement('summary'),
-                  datetime = document.createElement('input');
-                  datetime.type = 'datetime-local';
-                  datetime.min = mapmlInput.getAttribute('min');
-                  datetime.max = mapmlInput.getAttribute('max');
-                  datetime.value = mapmlInput.getAttribute('value');
-                  datetime.step = mapmlInput.getAttribute('step');
-                  var scopedInput = mapmlInput;
-                  datetime.addEventListener('change', propagateInputChange);
-                  summary.innerText = mapmlInput.getAttribute('name');
-                  L.DomUtil.addClass(deets, 'mapml-control-layers');
-                  deets.appendChild(summary);
-                  deets.appendChild(datetime);
-              frag.appendChild(deets);
-            }
-          }
-        }
-      }
-      return frag;
     },
     _withinZoomBounds: function(zoom, range) {
         return range.min <= zoom && zoom <= range.max;
     },
-    _setLegendLink: function (obj, span) {
-        if (obj.layer._legendUrl) {
-            var legendLink = document.createElement('a');
-            legendLink.text = ' ' + obj.name;
-            legendLink.href = obj.layer._legendUrl;
-            legendLink.target = '_blank';
-            span.innerHTML = '';
-            span.appendChild(legendLink);
-        } else {
-            span.innerHTML = ' ' + obj.name;
-        }
-    },
     _addItem: function (obj) {
-        var label = document.createElement('label'),
-            input,
-            checked = this._map.hasLayer(obj.layer);
+      var layercontrols  =  obj.layer.getLayerUserControlsHTML();
+      // the input is required by Leaflet...
+      obj.input = layercontrols.querySelector('input');
 
-      input = document.createElement('input');
-        input.type = 'checkbox';
-        input.className = 'leaflet-control-layers-selector';
-        input.defaultChecked = checked;
-        obj.input = input;
+      this._layerControlInputs.push(obj.input);
+    		obj.input.layerId = L.stamp(obj.layer);
 
-        this._layerControlInputs.push(input);
-        input.layerId = L.stamp(obj.layer);
+      L.DomEvent.on(obj.input, 'click', this._onInputClick, this);
 
-        L.DomEvent.on(input, 'click', this._onInputClick, this);
-
-        var name = document.createElement('span');
-        
-        this._setLegendLink(obj, name);
-        var details = document.createElement('details'),
-          summary = document.createElement('summary'),
-          opacity = document.createElement('input'),
-          opacityControl = document.createElement('details'),
-          opacityControlSummary = document.createElement('summary');
-          opacityControlSummary.innerText = 'opacity';
-          opacityControl.appendChild(opacityControlSummary);
-          opacityControl.appendChild(opacity);
-        L.DomUtil.addClass(details, 'mapml-control-layers');
-        L.DomUtil.addClass(opacityControl,'mapml-control-layers');
-        opacity.setAttribute('type','range');
-        opacity.setAttribute('min', '0');
-        opacity.setAttribute('max','1.0');
-        opacity.setAttribute('value', '1.0');
-        opacity.setAttribute('step','0.1');
-        
-        L.DomEvent.on(opacity,'change', obj.layer._changeOpacity, obj.layer);
-        
-        Polymer.dom(details).appendChild(summary);
-        Polymer.dom(label).appendChild(details);
-        Polymer.dom(summary).appendChild(input);
-        Polymer.dom(summary).appendChild(name);
-        Polymer.dom(details).appendChild(opacityControl);
-
-        var container = this._overlaysList;
-        Polymer.dom(container).appendChild(label);
-        // this is necessary because when there are several layers in the
-        // layer control, the response to the last one can be a long time
-        // after the info is first displayed, so we have to go back and
-        // verify the extent and legend for the layer to know whether to
-        // disable it , add the legend link etc.
-        obj.layer.on('extentload', this._validateExtents, this);
-        if (obj.layer._styles) {
-          Polymer.dom(details).appendChild(obj.layer._styles);
-        } else {
-          obj.layer.once('extentload', this._addStyleSelector, this);
-        }
-        obj.layer.once('extentload', this._addMiscInputs, this);
-
-        return label;
+      // this is necessary because when there are several layers in the
+      // layer control, the response to the last one can be a long time
+      // after the info is first displayed, so we have to go back and
+      // verify the extent and legend for the layer to know whether to
+      // disable it , add the legend link etc.
+      obj.layer.on('extentload', this._validateExtents, this);
+      
+      Polymer.dom(this._overlaysList).appendChild(layercontrols);
+      return layercontrols;
     }
 });
 M.mapMlLayerControl = function (layers, options) {

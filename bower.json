@@ -26,7 +26,7 @@
     "tests"
   ],
   "dependencies": { 
-    "polymer-leaflet": "Maps4HTML/Polymer-Leaflet#v0.2.0-Polymer-Leaflet",
+    "polymer-leaflet": "Maps4HTML/Polymer-Leaflet#v0.2.1-Polymer-Leaflet",
     "proj4leaflet ": "^1.0.0",
     "polymer": "^1.5.0"
   }
