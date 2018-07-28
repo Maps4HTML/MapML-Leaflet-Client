@@ -316,7 +316,7 @@ M.MapMLLayer = L.Layer.extend({
         if (href) {
             this._href = href;
         }
-        var mapml = content.querySelector('image,feature,tile') ? true : false;
+        var mapml = content.querySelector('image,feature,tile,extent') ? true : false;
         if (mapml) {
             this._content = content;
         }
@@ -797,8 +797,13 @@ M.MapMLLayer = L.Layer.extend({
         }
         function _processInitialExtent(content) {
             var mapml = this.responseXML || content;
-            if (mapml) {
-                var serverExtent = mapml.querySelector('extent');
+            if (this.readyState === this.DONE && mapml) {
+                var serverExtent = mapml.querySelector('extent'),
+                    projectionMatch = serverExtent && serverExtent.hasAttribute('units') && 
+                    serverExtent.getAttribute('units').toUpperCase() === layer.options.projection,
+                    selectedAlternate = !projectionMatch && mapml.querySelector('head link[rel=alternate][projection='+layer.options.projection+']'),
+                    base = (new URI(mapml.querySelector('base') ? mapml.querySelector('base').getAttribute('href') : null || this.responseURL)).resolve(new URI(this.responseURL));
+                
                 if (!serverExtent) {
                     serverExtent = layer._synthesizeExtent(mapml);
                     // the mapml resource does not have a (complete) extent form, save
@@ -806,6 +811,10 @@ M.MapMLLayer = L.Layer.extend({
                     if (mapml.querySelector('feature,image,tile')) {
                         layer._content = mapml;
                     }
+                } else if (!projectionMatch && selectedAlternate && selectedAlternate.hasAttribute('href')) {
+                     
+                    layer.fire('changeprojection', {href:  new URI(selectedAlternate.getAttribute('href')).resolve(base).toString()}, false);
+                    return;
                 } else if (!serverExtent.hasAttribute("action") && 
                         serverExtent.querySelector('link[rel=tile],link[rel=image],link[rel=query]') &&
                         serverExtent.hasAttribute("units") &&
@@ -876,8 +885,7 @@ M.MapMLLayer = L.Layer.extend({
                 
                 
                 var zoomin = mapml.querySelector('link[rel=zoomin]'),
-                    zoomout = mapml.querySelector('link[rel=zoomout]'),
-                    base = (new URI(mapml.querySelector('base') ? mapml.querySelector('base').getAttribute('href') : null || this.responseURL)).resolve(new URI(this.responseURL));
+                    zoomout = mapml.querySelector('link[rel=zoomout]');
                 delete layer._extent.zoomin;
                 delete layer._extent.zoomout;
                 if (zoomin) {
@@ -896,7 +904,7 @@ M.MapMLLayer = L.Layer.extend({
                   stylesControlSummary.innerText = 'style';
                   stylesControl.appendChild(stylesControlSummary);
                   var changeStyle = function (e) {
-                      layer.fire('changestyle', {label: e.target.value, src: e.target.getAttribute("data-href")}, false);
+                      layer.fire('changestyle', {src: e.target.getAttribute("data-href")}, false);
                   };
 
                   for (var j=0;j<styleLinks.length;j++) {
@@ -922,6 +930,8 @@ M.MapMLLayer = L.Layer.extend({
                 
                 if (mapml.querySelector('title')) {
                   layer._title = mapml.querySelector('title').textContent.trim();
+                } else if (mapml.hasAttribute('label')) {
+                  layer._title = mapml.getAttribute('label').trim();
                 }
                 if (layer._map) {
                     layer._validateExtent();
