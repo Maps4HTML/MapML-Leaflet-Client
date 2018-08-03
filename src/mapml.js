@@ -384,7 +384,7 @@ M.MapMLLayer = L.Layer.extend({
     onAdd: function (map) {
         this._map = map;
         if (!this._mapmlvectors) {
-          this._mapmlvectors = M.mapMlFeatures(null, {
+          this._mapmlvectors = M.mapMlFeatures(this._content, {
               // pass the vector layer a renderer of its own, otherwise leaflet
               // puts everything into the overlayPane
               renderer: L.svg(),
@@ -456,8 +456,8 @@ M.MapMLLayer = L.Layer.extend({
     _onZoomAnim: function(e) {
       var toZoom = e.zoom,
           zoom = this._extent.querySelector("input[type=zoom]"),
-          min = parseInt(zoom.getAttribute("min")),
-          max = parseInt(zoom.getAttribute("max")),
+          min = zoom && zoom.hasAttribute("min") ? parseInt(zoom.getAttribute("min")) : this._map.getMinZoom(),
+          max =  zoom && zoom.hasAttribute("max") ? parseInt(zoom.getAttribute("max")) : this._map.getMaxZoom(),
           canZoom = (toZoom < min && this._extent.zoomout) || (toZoom > max && this._extent.zoomin);
       if (!this._extent.hasAttribute('action') && !(min <= toZoom && toZoom <= max)){
         if (this._extent.zoomin && toZoom > max) {
@@ -480,7 +480,6 @@ M.MapMLLayer = L.Layer.extend({
     },
     onRemove: function (map) {
         L.DomUtil.remove(this._container);      
-        this._mapmlvectors.clearLayers();
         map.removeLayer(this._mapmlvectors);
         map.removeLayer(this._tileLayer);
         map.removeLayer(this._imageLayer);
@@ -489,12 +488,13 @@ M.MapMLLayer = L.Layer.extend({
         }
     },
     getZoomBounds: function () {
-        if (!this._extent) return;
+        var ext = this._extent;
+        var zoom = ext ? ext.querySelector('[type=zoom]') : undefined,
+            min = zoom && zoom.hasAttribute('min') ? zoom.getAttribute('min') : this._map.getMinZoom(),
+            max = zoom && zoom.hasAttribute('max') ? zoom.getAttribute('max') : this._map.getMaxZoom();
         var bounds = {};
-        var v1 = this._extent.querySelector('[type=zoom]').getAttribute('min'),
-            v2 = this._extent.querySelector('[type=zoom]').getAttribute('max');
-        bounds.min = Math.min(v1,v2);
-        bounds.max = Math.max(v1,v2);
+        bounds.min = Math.min(min,max);
+        bounds.max = Math.max(min,max);
         return bounds;
     },
     _transformDeprectatedInput: function (i) {
@@ -684,11 +684,6 @@ M.MapMLLayer = L.Layer.extend({
         input.type = 'checkbox';
         input.className = 'leaflet-control-layers-selector';
 
-//      this._layerControlInputs.push(input);
-
-//      L.DomEvent.on(input, 'click', this._onInputClick, this);
-
-
         if (this._legendUrl) {
           var legendLink = document.createElement('a');
           legendLink.text = ' ' + this._title;
@@ -718,15 +713,6 @@ M.MapMLLayer = L.Layer.extend({
         Polymer.dom(summary).appendChild(name);
         Polymer.dom(details).appendChild(opacityControl);
 
-//        var container = this._overlaysList;
-//        Polymer.dom(container).appendChild(label);
-//        
-        // this is necessary because when there are several layers in the
-        // layer control, the response to the last one can be a long time
-        // after the info is first displayed, so we have to go back and
-        // verify the extent and legend for the layer to know whether to
-        // disable it , add the legend link etc.
-//        obj.layer.on('extentload', this._validateExtents, this);
         if (this._styles) {
           Polymer.dom(details).appendChild(this._styles);
         }
@@ -766,7 +752,7 @@ M.MapMLLayer = L.Layer.extend({
         // referred to by this._content), we should use that content.
         if (this._href) {
             var xhr = new XMLHttpRequest();
-            xhr.withCredentials = true;
+//            xhr.withCredentials = true;
             _get(this._href, _processInitialExtent);
         } else if (content) {
             // may not set this._extent if it can't be done from the content
@@ -953,7 +939,7 @@ M.MapMLLayer = L.Layer.extend({
         if (url) {
             var requestCounter = 0;
             var xhr = new XMLHttpRequest();
-            xhr.withCredentials = true;
+//            xhr.withCredentials = true;
             // add a listener to terminate pulling the feed 
             this._map.once('movestart', function() {
               xhr.abort();
@@ -1769,7 +1755,7 @@ M.TemplatedLayer = L.Layer.extend({
               }
               break;
           }
-        } else if (type === "location" && units === "map") {
+        } else if (type === "location" && units === "map" || units === "tile") {
           // <input name="..." type="location" units="map" axis="i|j"/>
           if (axis === "i") {
             queryVarNames.query.i = name;
@@ -1870,7 +1856,9 @@ M.TemplatedLayer = L.Layer.extend({
             return crs.transformation.untransform(c,crs.scale(zoom));
           };
           
-      // the containerPoint is relative to the map container, with 0,0 at the upper left      
+      // the containerPoint is relative to the map container, with 0,0 at the upper left
+      // TODO convert the container point to a tile coordinate (0-255) if the
+      // crs being queried is "tile". How? unsure at this moment.
       obj[template.query.i] = e.containerPoint.x.toFixed();
       obj[template.query.j] = e.containerPoint.y.toFixed();
 
@@ -2432,214 +2420,219 @@ M.MapMLFeatures = L.FeatureGroup.extend({
 
       this._layers = {};
 
-          if (mapml) {
-                  this.addData(mapml);
-          }
+      if (mapml) {
+        this.addData(mapml);
+      }
     },
 
-addData: function (mapml) {
-		var features = mapml.nodeType === Node.DOCUMENT_NODE || mapml.nodeName === "LAYER-" ? mapml.getElementsByTagName("feature") : null,
-		    i, len, feature;
-            
-  var stylesheets = mapml.nodeType === Node.DOCUMENT_NODE ? mapml.querySelectorAll("link[rel=stylesheet]") : null;
-  if (stylesheets) {
-    for (i=0;i < stylesheets.length;i++) {
-      
-      var baseEl = mapml.querySelector('base'),
-          stylesheet = stylesheets[i],
-        base = new URI(baseEl?baseEl.getAttribute('href'):mapml.baseURI),
-        link = new URI(stylesheet.getAttribute('href'));
-        stylesheet = link.resolve(base).toString();
-      if (stylesheet) {
-        if (!document.head.querySelector("link[href='"+stylesheet+"']")) {
-          var linkElm = document.createElementNS("http://www.w3.org/1999/xhtml", "link");
-          linkElm.setAttribute("href", stylesheet);
-          linkElm.setAttribute("type", "text/css");
-          linkElm.setAttribute("rel", "stylesheet");
-          document.head.appendChild(linkElm);
+    addData: function (mapml) {
+      var features = mapml.nodeType === Node.DOCUMENT_NODE || mapml.nodeName === "LAYER-" ? mapml.getElementsByTagName("feature") : null,
+          i, len, feature;
+
+      var linkedStylesheets = mapml.nodeType === Node.DOCUMENT_NODE ? mapml.querySelectorAll("link[rel=stylesheet]") : null;
+      if (linkedStylesheets) {
+        for (i=0;i < linkedStylesheets.length;i++) {
+
+          var baseEl = mapml.querySelector('base'),
+              stylesheet = linkedStylesheets[i],
+            base = new URI(baseEl?baseEl.getAttribute('href'):mapml.baseURI),
+            link = new URI(stylesheet.getAttribute('href'));
+            stylesheet = link.resolve(base).toString();
+          if (stylesheet) {
+            if (!document.head.querySelector("link[href='"+stylesheet+"']")) {
+              var linkElm = document.createElementNS("http://www.w3.org/1999/xhtml", "link");
+              linkElm.setAttribute("href", stylesheet);
+              linkElm.setAttribute("type", "text/css");
+              linkElm.setAttribute("rel", "stylesheet");
+              document.head.appendChild(linkElm);
+            }
+          }
         }
       }
-    }
-  }
+      var inlineStyleSheets = mapml.nodeType === Node.DOCUMENT_NODE ? mapml.querySelectorAll("style") : null;
+      if (inlineStyleSheets) {
+        for (i=0;i<inlineStyleSheets.length;i++) {
+          document.head.insertAdjacentHTML('beforeend',inlineStyleSheets[i].outerHTML);
+        }
+      }
 
-		if (features) {
-			for (i = 0, len = features.length; i < len; i++) {
-				// Only add this if geometry is set and not null
-				feature = features[i];
-                                var geometriesExist = feature.getElementsByTagName("geometry").length && feature.getElementsByTagName("coordinates").length;
-				if (geometriesExist) {
-					this.addData(feature);
-				}
-			}
-			return this;
-		}
+      if (features) {
+       for (i = 0, len = features.length; i < len; i++) {
+        // Only add this if geometry is set and not null
+        feature = features[i];
+        var geometriesExist = feature.getElementsByTagName("geometry").length && feature.getElementsByTagName("coordinates").length;
+        if (geometriesExist) {
+         this.addData(feature);
+        }
+       }
+       return this;
+      }
 
-		var options = this.options;
+      var options = this.options;
 
-		if (options.filter && !options.filter(mapml)) { return; }
+      if (options.filter && !options.filter(mapml)) { return; }
 
-		var layer = M.MapMLFeatures.geometryToLayer(mapml, options.pointToLayer, options.coordsToLatLng, options);
-		layer.properties = mapml.getElementsByTagName('properties')[0];
-                
-                layer.options.className = mapml.getAttribute('class') ? mapml.getAttribute('class') : null;
-		layer.defaultOptions = layer.options;
-		this.resetStyle(layer);
+      var layer = M.MapMLFeatures.geometryToLayer(mapml, options.pointToLayer, options.coordsToLatLng, options);
+      if (layer) {
+        layer.properties = mapml.getElementsByTagName('properties')[0];
 
-		if (options.onEachFeature) {
-			options.onEachFeature(layer.properties, layer);
-		}
+        layer.options.className = mapml.getAttribute('class') ? mapml.getAttribute('class') : null;
+        layer.defaultOptions = layer.options;
+        this.resetStyle(layer);
 
-		return this.addLayer(layer);
-},
+        if (options.onEachFeature) {
+         options.onEachFeature(layer.properties, layer);
+        }
+        return this.addLayer(layer);
+      }
+    },
         
-	resetStyle: function (layer) {
-		var style = this.options.style;
-		if (style) {
-			// reset any custom styles
-			L.Util.extend(layer.options, layer.defaultOptions);
+    resetStyle: function (layer) {
+      var style = this.options.style;
+      if (style) {
+       // reset any custom styles
+       L.Util.extend(layer.options, layer.defaultOptions);
+       this._setLayerStyle(layer, style);
+      }
+    },
 
-			this._setLayerStyle(layer, style);
-		}
-	},
+    setStyle: function (style) {
+      this.eachLayer(function (layer) {
+        this._setLayerStyle(layer, style);
+      }, this);
+    },
 
-	setStyle: function (style) {
-		this.eachLayer(function (layer) {
-			this._setLayerStyle(layer, style);
-		}, this);
-	},
-
-	_setLayerStyle: function (layer, style) {
-		if (typeof style === 'function') {
-			style = style(layer.feature);
-		}
-		if (layer.setStyle) {
-			layer.setStyle(style);
-		}
-	}
+    _setLayerStyle: function (layer, style) {
+      if (typeof style === 'function') {
+        style = style(layer.feature);
+      }
+      if (layer.setStyle) {
+        layer.setStyle(style);
+      }
+    }
 });
 L.extend(M.MapMLFeatures, {
-	geometryToLayer: function (mapml, pointToLayer, coordsToLatLng, vectorOptions) {
-		var geometry = mapml.tagName.toUpperCase() === 'FEATURE' ? mapml.getElementsByTagName('geometry')[0] : mapml,
-		    coords = geometry.getElementsByTagName('coordinates'),
-		    layers = [],
-		    latlng, latlngs, i, coordinates;
+	 geometryToLayer: function (mapml, pointToLayer, coordsToLatLng, vectorOptions) {
+    var geometry = mapml.tagName.toUpperCase() === 'FEATURE' ? mapml.getElementsByTagName('geometry')[0] : mapml,
+        latlng, latlngs, coordinates;
 
-		coordsToLatLng = coordsToLatLng || this.coordsToLatLng;
+    coordsToLatLng = coordsToLatLng || this.coordsToLatLng;
 
-		switch (geometry.firstElementChild.tagName.toUpperCase()) {
-		case 'POINT':
-                        coordinates = [];
-                        coords[0].textContent.split(/\s+/gi).forEach(parseNumber,coordinates);
-			latlng = coordsToLatLng(coordinates);
-                        
-                        var opacity = vectorOptions.opacity ? vectorOptions.opacity : null;
-			return pointToLayer ? pointToLayer(mapml, latlng) : 
-                                new L.Marker(latlng, {opacity: opacity, icon: L.icon({
-                                    iconUrl: vectorOptions.imagePath+"marker-icon.png",
-                                    iconRetinaUrl: vectorOptions.imagePath+"marker-icon-2x.png",
-                                    shadowUrl: vectorOptions.imagePath+"marker-shadow.png",
-                                    iconSize: [25, 41],
-                                    iconAnchor: [12, 41],
-                                    popupAnchor: [1, -34],
-                                    shadowSize: [41, 41]})});
+    switch (geometry.firstElementChild.tagName.toUpperCase()) {
+      case 'POINT':
+        coordinates = [];
+        geometry.getElementsByTagName('coordinates')[0].textContent.split(/\s+/gim).forEach(parseNumber,coordinates);
+        latlng = coordsToLatLng(coordinates);
 
-		case 'MULTIPOINT':
-                        throw new Error('Not implemented yet');
-//			for (i = 0, len = coords.length; i < len; i++) {
-//				latlng = coordsToLatLng(coords[i]);
-//				layers.push(pointToLayer ? pointToLayer(mapml, latlng) : new L.Marker(latlng));
-//			}
-//			return new L.FeatureGroup(layers);
+        var opacity = vectorOptions.opacity ? vectorOptions.opacity : null;
+        return pointToLayer ? pointToLayer(mapml, latlng) : 
+                                    new L.Marker(latlng, {opacity: opacity, icon: L.icon({
+                                        iconUrl: vectorOptions.imagePath+"marker-icon.png",
+                                        iconRetinaUrl: vectorOptions.imagePath+"marker-icon-2x.png",
+                                        shadowUrl: vectorOptions.imagePath+"marker-shadow.png",
+                                        iconSize: [25, 41],
+                                        iconAnchor: [12, 41],
+                                        popupAnchor: [1, -34],
+                                        shadowSize: [41, 41]})});
 
-		case 'LINESTRING':
-                        coordinates = [];
-                        coords[0].textContent.match(/(\S+ \S+)/gi).forEach(splitCoordinate, coordinates);
-			latlngs = this.coordsToLatLngs(coordinates, 0, coordsToLatLng);
-			return new L.Polyline(latlngs, vectorOptions);
+      case 'MULTIPOINT':
+        console.log('MULTIPOINT Not implemented yet');
+        break;
+      case 'LINESTRING':
+        coordinates = [];
+        geometry.getElementsByTagName('coordinates')[0].textContent.match(/(\S+ \S+)/gim).forEach(splitCoordinate, coordinates);
+        latlngs = this.coordsToLatLngs(coordinates, 0, coordsToLatLng);
+        return new L.Polyline(latlngs, vectorOptions);
+      case 'MULTILINESTRING':
+        console.log('MULTILINESTRING Not implemented yet');
+        break;
+      case 'POLYGON':
+        var rings = geometry.getElementsByTagName('coordinates');
+        latlngs = this.coordsToLatLngs(coordinatesToArray(rings), 1, coordsToLatLng);
+        return new L.Polygon(latlngs, vectorOptions);
+      case 'MULTIPOLYGON':
+        var members = geometry.getElementsByTagName('polygon'),
+            polygons = new Array(members.length);
+        for (var member=0;member<members.length;member++) {
+          polygons[member] = coordinatesToArray(members[member].querySelectorAll('coordinates'));
+        }
+        latlngs = this.coordsToLatLngs(polygons, 2, coordsToLatLng);
+        return new L.Polygon(latlngs, vectorOptions);
+      case 'GEOMETRYCOLLECTION':
+        console.log('GEOMETRYCOLLECTION Not implemented yet');
+        break;
+    //			for (i = 0, len = geometry.geometries.length; i < len; i++) {
+    //
+    //				layers.push(this.geometryToLayer({
+    //					geometry: geometry.geometries[i],
+    //					type: 'Feature',
+    //					properties: geojson.properties
+    //				}, pointToLayer, coordsToLatLng, vectorOptions));
+    //			}
+    //			return new L.FeatureGroup(layers);
 
-		case 'POLYGON':
-                        coordinates = new Array(coords.length);
-                        for (i=0;i<coords.length;i++) {
-                          coordinates[i]=[];
-                          coords[i].textContent.match(/(\S+ \S+)/gi).forEach(splitCoordinate, coordinates[i]);
-                        }
-			latlngs = this.coordsToLatLngs(coordinates, 1, coordsToLatLng);
-			return new L.Polygon(latlngs, vectorOptions);
-		case 'MULTILINESTRING':
-                        throw new Error('Not implemented yet');
-//			latlngs = this.coordsToLatLngs(coords, 1, coordsToLatLng);
-//			return new L.MultiPolyline(latlngs, vectorOptions);
+      default:
+        console.log('Invalid GeoJSON object.');
+        break;
+    }
+    function coordinatesToArray(coordinates) {
+      var a = new Array(coordinates.length);
+      for (var i=0;i<a.length;i++) {
+        a[i]=[];
+        coordinates[i].textContent.match(/(\S+\s+\S+)/gim).forEach(splitCoordinate, a[i]);
+      }
+      return a;
+    }
 
-		case 'MULTIPOLYGON':
-                        throw new Error('Not implemented yet');
-//			latlngs = this.coordsToLatLngs(coords, 2, coordsToLatLng);
-//			return new L.MultiPolygon(latlngs, vectorOptions);
+    function splitCoordinate(element, index, array) {
+      var a = [];
+      element.split(/\s+/gim).forEach(parseNumber,a);
+      this.push(a);
+    }
 
-		case 'GEOMETRYCOLLECTION':
-                        throw new Error('Not implemented yet');
-//			for (i = 0, len = geometry.geometries.length; i < len; i++) {
-//
-//				layers.push(this.geometryToLayer({
-//					geometry: geometry.geometries[i],
-//					type: 'Feature',
-//					properties: geojson.properties
-//				}, pointToLayer, coordsToLatLng, vectorOptions));
-//			}
-//			return new L.FeatureGroup(layers);
-
-		default:
-			throw new Error('Invalid GeoJSON object.');
-		}
-
-                function splitCoordinate(element, index, array) {
-                  var a = [];
-                  element.split(/\s+/gi).forEach(parseNumber,a);
-                  this.push(a);
-                }
-
-                function parseNumber(element, index, array) {
-                  this.push(parseFloat(element));
-                }
-        },
+    function parseNumber(element, index, array) {
+      this.push(parseFloat(element));
+    }
+  },
         
 
-	coordsToLatLng: function (coords) { // (Array[, Boolean]) -> LatLng
-		return new L.LatLng(coords[1], coords[0], coords[2]);
-	},
+  coordsToLatLng: function (coords) { // (Array[, Boolean]) -> LatLng
+   return new L.LatLng(coords[1], coords[0], coords[2]);
+  },
 
-	coordsToLatLngs: function (coords, levelsDeep, coordsToLatLng) { // (Array[, Number, Function]) -> Array
-		var latlng, i, len,
-		    latlngs = [];
+  coordsToLatLngs: function (coords, levelsDeep, coordsToLatLng) { // (Array[, Number, Function]) -> Array
+    var latlng, i, len,
+        latlngs = [];
 
-		for (i = 0, len = coords.length; i < len; i++) {
-			latlng = levelsDeep ?
-			        this.coordsToLatLngs(coords[i], levelsDeep - 1, coordsToLatLng) :
-			        (coordsToLatLng || this.coordsToLatLng)(coords[i]);
+    for (i = 0, len = coords.length; i < len; i++) {
+     latlng = levelsDeep ?
+             this.coordsToLatLngs(coords[i], levelsDeep - 1, coordsToLatLng) :
+             (coordsToLatLng || this.coordsToLatLng)(coords[i]);
 
-			latlngs.push(latlng);
-		}
+     latlngs.push(latlng);
+    }
 
-		return latlngs;
-	},
+    return latlngs;
+  },
 
-	latLngToCoords: function (latlng) {
-		var coords = [latlng.lng, latlng.lat];
+  latLngToCoords: function (latlng) {
+    var coords = [latlng.lng, latlng.lat];
 
-		if (latlng.alt !== undefined) {
-			coords.push(latlng.alt);
-		}
-		return coords;
-	},
+    if (latlng.alt !== undefined) {
+     coords.push(latlng.alt);
+    }
+    return coords;
+  },
 
-	latLngsToCoords: function (latLngs) {
-		var coords = [];
+  latLngsToCoords: function (latLngs) {
+    var coords = [];
 
-		for (var i = 0, len = latLngs.length; i < len; i++) {
-			coords.push(L.MapML.latLngToCoords(latLngs[i]));
-		}
+    for (var i = 0, len = latLngs.length; i < len; i++) {
+      coords.push(L.MapML.latLngToCoords(latLngs[i]));
+    }
 
-		return coords;
-	}
+    return coords;
+  }
 });
 M.mapMlFeatures = function (mapml, options) {
 	return new M.MapMLFeatures(mapml, options);
