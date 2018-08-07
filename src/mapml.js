@@ -421,12 +421,12 @@ M.MapMLLayer = L.Layer.extend({
          * info received from mapml server. */
         if (this._extent) {
             if (this._templateVars) {
-              this._templatedLayer = M.templatedLayer(this._templateVars, {pane: this._container}).addTo(map);
+              this._templatedLayer = M.templatedLayer(this._templateVars, {pane: this._container,imagePath: this._detectImagePath(this._map.getContainer())}).addTo(map);
             }
         } else {
             this.once('extentload', function() {
                 if (this._templateVars) {
-                  this._templatedLayer = M.templatedLayer(this._templateVars, {pane: this._container}).addTo(map);
+                  this._templatedLayer = M.templatedLayer(this._templateVars, {pane: this._container,imagePath: this._detectImagePath(this._map.getContainer())}).addTo(map);
                 }
               }, this);
             // if we get to this point and there is no this._extent, it means
@@ -802,12 +802,11 @@ M.MapMLLayer = L.Layer.extend({
                     layer.fire('changeprojection', {href:  new URI(selectedAlternate.getAttribute('href')).resolve(base).toString()}, false);
                     return;
                 } else if (!serverExtent.hasAttribute("action") && 
-                        serverExtent.querySelector('link[rel=tile],link[rel=image],link[rel=query]') &&
-                        serverExtent.hasAttribute("units") &&
-                        (serverExtent.getAttribute("units") !== "WGS84")) {
+                        serverExtent.querySelector('link[rel=tile],link[rel=image],link[rel=features],link[rel=query]') &&
+                        serverExtent.hasAttribute("units")) {
                   layer._templateVars = [];
                   // set up the URL template and associated inputs (which yield variable values when processed)
-                  var tlist = serverExtent.querySelectorAll('link[rel=tile],link[rel=image],link[rel=query]'),
+                  var tlist = serverExtent.querySelectorAll('link[rel=tile],link[rel=image],link[rel=features],link[rel=query]'),
                       varNamesRe = (new RegExp('(?:\{)(.*?)(?:\})','g'));
                   for (var i=0;i< tlist.length;i++) {
                     var t = tlist[i],
@@ -979,12 +978,11 @@ M.MapMLLayer = L.Layer.extend({
                 if (!serverExtent) {
                     serverExtent = layer._synthesizeExtent(mapml);
                 } else if (!serverExtent.hasAttribute("action") && 
-                        serverExtent.querySelector('link[rel=tile],link[rel=image],link[rel=query]') &&
-                        serverExtent.hasAttribute("units") &&
-                        (serverExtent.getAttribute("units") !== "WGS84")) {
+                        serverExtent.querySelector('link[rel=tile],link[rel=image],link[rel=features],link[rel=query]') &&
+                        serverExtent.hasAttribute("units")) {
                   layer._templateVars = [];
                   // set up the URL template and associated inputs (which yield variable values when processed)
-                  var tlist = serverExtent.querySelectorAll('link[rel=tile],link[rel=image],link[rel=query]'),
+                  var tlist = serverExtent.querySelectorAll('link[rel=tile],link[rel=image],link[rel=features],link[rel=query]'),
                       varNamesRe = (new RegExp('(?:\{)(.*?)(?:\})','g'));
                   for (i=0;i< tlist.length;i++) {
                     var t = tlist[i],
@@ -1659,8 +1657,237 @@ M.TemplatedImageLayer =  L.Layer.extend({
 M.templatedImageLayer = function(template, options) {
     return new M.TemplatedImageLayer(template, options);
 };
+M.TemplatedFeaturesLayer =  L.Layer.extend({
+  // this and M.ImageLayer could be merged or inherit from a common parent
+    initialize: function(template, options) {
+        this._template = template;
+        this._container = L.DomUtil.create('div', 'leaflet-layer', options.pane);
+        L.DomUtil.addClass(this._container, 'mapml-features-container');
+        L.setOptions(this, L.extend(options,this._setUpFeaturesTemplateVars(template)));
+    },
+    getEvents: function () {
+        var events = {
+            moveend: this._onMoveEnd
+        };
+        return events;
+    },
+    onAdd: function () {
+      var mapml, headers = new Headers({'Accept': 'text/mapml'});
+          var parser = new DOMParser(),
+          opacity = this.options.opacity,
+          container = this._container,
+          map = this._map;
+      if (!this._features) {
+        this._features = M.mapMlFeatures( null, {
+          // pass the vector layer a renderer of its own, otherwise leaflet
+          // puts everything into the overlayPane
+          renderer: L.svg(),
+          // pass the vector layer the container for the parent into which
+          // it will append its own container for rendering into
+          pane: container,
+          opacity: opacity,
+          imagePath: this.options.imagePath,
+          onEachFeature: function(properties, geometry) {
+            // need to parse as HTML to preserve semantics and styles
+            var c = document.createElement('div');
+            c.insertAdjacentHTML('afterbegin', properties.innerHTML);
+            geometry.bindPopup(c, {autoPan:false});
+          }
+        });
+      }
+      // this was tricky...recursion alwasy breaks my brain
+      var features = this._features,
+          _pullFeatureFeed = function (url, limit) {
+            return (fetch (url,{redirect: 'follow',headers: headers})
+                    .then( function (response) {return response.text();})
+                    .then( function (text) {
+              mapml = parser.parseFromString(text,"application/xml");
+              var base = new URI(mapml.querySelector('base') ? mapml.querySelector('base').getAttribute('href') : url);
+              url = mapml.querySelector('link[rel=next]')? mapml.querySelector('link[rel=next]').getAttribute('href') : null;
+              url =  url ? new URI(url).resolve(base).toString(): null;
+              features.addData(mapml);
+              if (url && --limit) {
+                return _pullFeatureFeed(url, limit);
+              }
+            }));
+          };
+      _pullFeatureFeed(this._getfeaturesUrl(), 10)
+        .then(function() { 
+              map.addLayer(features);
+        })
+        .catch(function (error) { console.log(error);});
+    },
+    _onMoveEnd: function() {
+      this._features.clearLayers();
+      var mapml, headers = new Headers({'Accept': 'text/mapml'}),
+          parser = new DOMParser(),
+          features = this._features,
+          map = this._map,
+        _pullFeatureFeed = function (url, limit) {
+          return (fetch (url,{redirect: 'follow',headers: headers})
+                  .then( function (response) {return response.text();})
+                  .then( function (text) {
+              mapml = parser.parseFromString(text,"application/xml");
+              var base = new URI(mapml.querySelector('base') ? mapml.querySelector('base').getAttribute('href') : url);
+              url = mapml.querySelector('link[rel=next]')? mapml.querySelector('link[rel=next]').getAttribute('href') : null;
+              url =  url ? new URI(url).resolve(base).toString(): null;
+            features.addData(mapml);
+            if (url && --limit) {
+              return _pullFeatureFeed(url, limit);
+            }
+          }));
+        };
+      _pullFeatureFeed(this._getfeaturesUrl(), 10)
+        .then(function() { 
+          map.addLayer(features);
+        })
+        .catch(function (error) { console.log(error);});
+    },
+    setZIndex: function (zIndex) {
+        this.options.zIndex = zIndex;
+        this._updateZIndex();
+        return this;
+    },
+    _updateZIndex: function () {
+        if (this._container && this.options.zIndex !== undefined && this.options.zIndex !== null) {
+            this._container.style.zIndex = this.options.zIndex;
+        }
+    },
+    onRemove: function () {
+      this._map.removeLayer(this._features);
+    },
+    _getfeaturesUrl: function() {
+        var pxBounds = this._map.getPixelBounds(),
+            topLeft = pxBounds.getTopLeft(),
+            topRight = pxBounds.getTopRight(),
+            bottomRight = pxBounds.getBottomRight(),
+            bottomLeft = pxBounds.getBottomLeft(),
+            bounds = this._map.getBounds();
+            bounds.extend(this._map.unproject(bottomLeft))
+                  .extend(this._map.unproject(bottomRight))
+                  .extend(this._map.unproject(topLeft))
+                  .extend(this._map.unproject(topRight));
+        var obj = {};
+        // assumes gcrs at this moment
+        obj[this.options.feature.zoom.name] = this._map.getZoom();
+        obj[this.options.feature.bottom.name] = bounds.getSouth();
+        obj[this.options.feature.left.name] = bounds.getWest();
+        obj[this.options.feature.top.name] = bounds.getNorth();
+        obj[this.options.feature.right.name] = bounds.getEast();
+        // hidden and other variables that may be associated
+        for (var v in this.options.feature) {
+            if (["width","height","left","right","top","bottom","zoom"].indexOf(v) < 0) {
+                obj[v] = this.options.feature[v];
+              }
+        }
+        return L.Util.template(this._template.template, obj);
+    },
+    _setUpFeaturesTemplateVars: function(template) {
+      // process the inputs and create an object named "extent"
+      // with member properties as follows:
+      // {width: {name: 'widthvarname'}, // value supplied by map if necessary
+      //  height: {name: 'heightvarname'}, // value supplied by map if necessary
+      //  left: {name: 'leftvarname', axis: 'leftaxisname'}, // axis name drives (coordinate system of) the value supplied by the map
+      //  right: {name: 'rightvarname', axis: 'rightaxisname'}, // axis name (coordinate system of) drives the value supplied by the map
+      //  top: {name: 'topvarname', axis: 'topaxisname'}, // axis name drives (coordinate system of) the value supplied by the map
+      //  bottom: {name: 'bottomvarname', axis: 'bottomaxisname'} // axis name drives (coordinate system of) the value supplied by the map
+      //  zoom: {name: 'zoomvarname'}
+      //  hidden: [{name: name, value: value}]}
+
+      var featuresVarNames = {feature:{}},
+          inputs = template.values;
+      featuresVarNames.feature.hidden = [];
+      for (var i=0;i<inputs.length;i++) {
+        // this can be removed when the spec removes the deprecated inputs...
+        var type = inputs[i].getAttribute("type"), 
+            units = inputs[i].getAttribute("units"), 
+            axis = inputs[i].getAttribute("axis"), 
+            name = inputs[i].getAttribute("name"), 
+            position = inputs[i].getAttribute("position"),
+            value = inputs[i].getAttribute("value"),
+            select = (inputs[i].tagName.toLowerCase() === "select");
+        if (type === "width") {
+              featuresVarNames.feature.width = {name: name};
+        } else if ( type === "height") {
+              featuresVarNames.feature.height = {name: name};
+        } else if (type === "zoom") {
+              featuresVarNames.feature.zoom = {name: name};
+        } else if (type === "location" && (units === "pcrs" || units ==="gcrs" || units === "tcrs")) {
+          //<input name="..." units="pcrs" type="location" position="top|bottom-left|right" axis="northing|easting"/>
+          switch (axis) {
+            case ('easting'):
+              if (position) {
+                  if (position.match(/.*?-left/i)) {
+                    featuresVarNames.feature.left = { name: name, axis: axis};
+                  } else if (position.match(/.*?-right/i)) {
+                    featuresVarNames.feature.right = { name: name, axis: axis};
+                  }
+              }
+              break;
+            case ('northing'):
+              if (position) {
+                if (position.match(/top-.*?/i)) {
+                  featuresVarNames.feature.top = { name: name, axis: axis};
+                } else if (position.match(/bottom-.*?/i)) {
+                  featuresVarNames.feature.bottom = { name: name, axis: axis};
+                }
+              }
+              break;
+            case ('x'):
+              if (position) {
+                  if (position.match(/.*?-left/i)) {
+                    featuresVarNames.feature.left = { name: name, axis: axis};
+                  } else if (position.match(/.*?-right/i)) {
+                    featuresVarNames.feature.right = { name: name, axis: axis};
+                  }
+              }
+              break;
+            case ('y'):
+              if (position) {
+                if (position.match(/top-.*?/i)) {
+                  featuresVarNames.feature.top = { name: name, axis: axis};
+                } else if (position.match(/bottom-.*?/i)) {
+                  featuresVarNames.feature.bottom = { name: name, axis: axis};
+                }
+              }
+              break;
+            case ('longitude'):
+              if (position) {
+                  if (position.match(/.*?-left/i)) {
+                    featuresVarNames.feature.left = { name: name, axis: axis};
+                  } else if (position.match(/.*?-right/i)) {
+                    featuresVarNames.feature.right = { name: name, axis: axis};
+                  }
+              }
+              break;
+            case ('latitude'):
+              if (position) {
+                if (position.match(/top-.*?/i)) {
+                  featuresVarNames.feature.top = { name: name, axis: axis};
+                } else if (position.match(/bottom-.*?/i)) {
+                  featuresVarNames.feature.bottom = { name: name, axis: axis};
+                }
+              }
+              break;
+          }
+         } else if (select) {
+            /*jshint -W104 */
+          const parsedselect = inputs[i].htmlselect;
+          featuresVarNames.feature[name] = function() {
+              return parsedselect.value;
+          };
+         // projection is deprecated, make it hidden
+        } else if (type === "hidden" || type === "projection") {
+            featuresVarNames.feature.hidden.push({name: name, value: value});
+        }
+      }
+      return featuresVarNames;
+    }
+});
+M.templatedFeaturesLayer = function(template, options) {
+    return new M.TemplatedFeaturesLayer(template, options);
+};
 M.TemplatedLayer = L.Layer.extend({
-  
   initialize: function(templates, options) {
     this._templates =  templates;
     L.setOptions(this, options);
@@ -1673,6 +1900,8 @@ M.TemplatedLayer = L.Layer.extend({
             L.Util.extend(options, {errorTileUrl: "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==", zIndex: i, pane: this._container}));
       } else if (templates[i].type === 'image') {
           this._templates[i].layer = M.templatedImageLayer(templates[i], L.Util.extend(options, {zIndex: i, pane: this._container}));
+      } else if (templates[i].type === 'features') {
+          this._templates[i].layer = M.templatedFeaturesLayer(templates[i], L.Util.extend(options, {zIndex: i, pane: this._container}));
       } else if (templates[i].type === 'query') {
           // add template to array of queryies to be added to map and processed
           // on click/tap events
@@ -1691,7 +1920,7 @@ M.TemplatedLayer = L.Layer.extend({
   redraw: function() {
     this.closePopup();
     for (var i=0;i<this._templates.length;i++) {
-      if (this._templates[i].type === 'tile' || this._templates[i].type === 'image') {
+      if (this._templates[i].type === 'tile' || this._templates[i].type === 'image' || this._templates[i].type === 'features') {
           this._templates[i].layer.redraw();
       }
     }
@@ -1803,6 +2032,8 @@ M.TemplatedLayer = L.Layer.extend({
             L.Util.extend(this.options, {errorTileUrl: "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==", zIndex: i, pane: this._container}));
       } else if (templates[i].type === 'image') {
           this._templates[i].layer = M.templatedImageLayer(templates[i], L.Util.extend(this.options, {zIndex: i, pane: this._container}));
+      } else if (templates[i].type === 'features') {
+          this._templates[i].layer = M.templatedFeaturesLayer(templates[i], L.Util.extend(this.options, {zIndex: i, pane: this._container}));
       } else if (templates[i].type === 'query') {
           if (!this._queries) {
             this._queries = [];
