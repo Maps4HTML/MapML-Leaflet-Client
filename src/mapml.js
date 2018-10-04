@@ -683,6 +683,7 @@ M.MapMLLayer = L.Layer.extend({
         input.defaultChecked = this._map ? true: false;
         input.type = 'checkbox';
         input.className = 'leaflet-control-layers-selector';
+        name.draggable = true;
 
         if (this._legendUrl) {
           var legendLink = document.createElement('a');
@@ -706,6 +707,18 @@ M.MapMLLayer = L.Layer.extend({
         opacity.setAttribute('step','0.1');
 
         L.DomEvent.on(opacity,'change', this._changeOpacity, this);
+        L.DomEvent.on(name,'dragstart', function(event) {
+            // will have to figure out how to drag and drop a whole element
+            // with its contents in the case where the <layer->content</layer-> 
+            // has no src but does have inline content.  
+            // Should be do-able, I think.
+            if (this._href) {
+              event.dataTransfer.setData("text/uri-list",this._href);
+              // Why use a second .setData("text/plain"...) ? This is very important:
+              // See https://developer.mozilla.org/en-US/docs/Web/API/HTML_Drag_and_Drop_API/Recommended_drag_types#link
+              event.dataTransfer.setData("text/plain", this._href); 
+            }
+          }, this);
 
         Polymer.dom(details).appendChild(summary);
         Polymer.dom(label).appendChild(details);
@@ -1719,25 +1732,29 @@ M.TemplatedFeaturesLayer =  L.Layer.extend({
     },
     _onMoveEnd: function() {
       this._features.clearLayers();
-      var mapml, headers = new Headers({'Accept': 'text/mapml'}),
+      // TODO add preference with a bit less weight than that for text/mapml; 0.8 for application/geo+json; 0.6
+      var mapml, headers = new Headers({'Accept': 'text/mapml;q=0.9,application/geo+json;q=0.8'}),
           parser = new DOMParser(),
           features = this._features,
           map = this._map,
+          MAX_PAGES = 10,
         _pullFeatureFeed = function (url, limit) {
           return (fetch (url,{redirect: 'follow',headers: headers})
                   .then( function (response) {return response.text();})
                   .then( function (text) {
+                    //TODO wrap this puppy in a try/catch/finally to parse application/geo+json if necessary
               mapml = parser.parseFromString(text,"application/xml");
               var base = new URI(mapml.querySelector('base') ? mapml.querySelector('base').getAttribute('href') : url);
               url = mapml.querySelector('link[rel=next]')? mapml.querySelector('link[rel=next]').getAttribute('href') : null;
               url =  url ? new URI(url).resolve(base).toString(): null;
+              // TODO if the xml parser barfed but the response is application/geo+json, use the parent addData method
             features.addData(mapml);
             if (url && --limit) {
               return _pullFeatureFeed(url, limit);
             }
           }));
         };
-      _pullFeatureFeed(this._getfeaturesUrl(), 10)
+      _pullFeatureFeed(this._getfeaturesUrl(), MAX_PAGES)
         .then(function() { 
           map.addLayer(features);
         })
