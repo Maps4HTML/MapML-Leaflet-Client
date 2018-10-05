@@ -1975,6 +1975,17 @@ M.TemplatedLayer = L.Layer.extend({
               queryVarNames.query.width = name;
         } else if ( type === "height") {
               queryVarNames.query.height = name;
+        } else if (type === "location" && units === "tilematrix") {
+          switch (axis) {
+            case("column"):
+              queryVarNames.query.col = name;
+              break;
+            case("row"):
+              queryVarNames.query.row = name;
+              break;
+            default:
+              // unsuportted axis value
+          }
         } else if (type === "location" && units === "pcrs") {
           //<input name="..." units="pcrs" type="location" position="top|bottom-left|right" axis="northing|easting"/>
           switch (axis) {
@@ -2104,17 +2115,21 @@ M.TemplatedLayer = L.Layer.extend({
             return crs.transformation.untransform(c,crs.scale(zoom));
           };
           
-      // the containerPoint is relative to the map container, with 0,0 at the upper left
-      // TODO convert the container point to a tile coordinate (0-255) if the
-      // crs being queried is "tile". How? unsure at this moment.
-      obj[template.query.i] = e.containerPoint.x.toFixed();
-      obj[template.query.j] = e.containerPoint.y.toFixed();
+          
+      var tcrsClickLoc = map.getPixelOrigin().add(e.layerPoint),
+          tileMatrixClickLoc = tcrsClickLoc.divideBy(256).floor();
+
+      obj[template.query.i] = tcrsClickLoc.x.toFixed() - (tileMatrixClickLoc.x * 256);
+      obj[template.query.j] = tcrsClickLoc.y.toFixed() - (tileMatrixClickLoc.y * 256);
+      
+      obj[template.query.col] = tileMatrixClickLoc.x;
+      obj[template.query.row] = tileMatrixClickLoc.y;
 
       // whereas the layerPoint is calculated relative to the origin plus / minus any
       // pan movements so is equal to containerPoint at first before any pans, but
       // changes as the map pans. 
-      obj[template.query.x] = map.getPixelOrigin().add(e.layerPoint).x.toFixed();
-      obj[template.query.y] = map.getPixelOrigin().add(e.layerPoint).y.toFixed();
+      obj[template.query.x] = tcrsClickLoc.x.toFixed();
+      obj[template.query.y] = tcrsClickLoc.y.toFixed();
       obj[template.query.easting] =  tcrs2pcrs(map.getPixelOrigin().add(e.layerPoint)).x;
       obj[template.query.northing] = tcrs2pcrs(map.getPixelOrigin().add(e.layerPoint)).y;
       obj[template.query.zoom] = zoom;
@@ -2127,7 +2142,7 @@ M.TemplatedLayer = L.Layer.extend({
       // add hidden or other variables that may be present into the values to
       // be processed by L.Util.template below.
       for (var v in template.query) {
-          if (["i","j","x","y","easting","northing","width","height","zoom","left","right","top","bottom"].indexOf(v) < 0) {
+          if (["i","j","row","col","x","y","easting","northing","width","height","zoom","left","right","top","bottom"].indexOf(v) < 0) {
               obj[v] = template.query[v];
           }
       }
