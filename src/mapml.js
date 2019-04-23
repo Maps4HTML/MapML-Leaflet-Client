@@ -1983,6 +1983,24 @@ M.TemplatedLayer = L.Layer.extend({
             case("row"):
               queryVarNames.query.row = name;
               break;
+            case ('easting'):
+              if (position) {
+                  if (position.match(/.*?-left/i)) {
+                    queryVarNames.query.tileleft = name;
+                  } else if (position.match(/.*?-right/i)) {
+                    queryVarNames.query.tileright = name;
+                  }
+              }
+              break;
+            case ('northing'):
+              if (position) {
+                if (position.match(/top-.*?/i)) {
+                  queryVarNames.query.tiletop = name;
+                } else if (position.match(/bottom-.*?/i)) {
+                  queryVarNames.query.tilebottom = name;
+                }
+              }
+              break;
             default:
               // unsuportted axis value
           }
@@ -1992,9 +2010,9 @@ M.TemplatedLayer = L.Layer.extend({
             case ('easting'):
               if (position) {
                   if (position.match(/.*?-left/i)) {
-                    queryVarNames.query.left = name;
+                    queryVarNames.query.mapleft = name;
                   } else if (position.match(/.*?-right/i)) {
-                    queryVarNames.query.right = name;
+                    queryVarNames.query.mapright = name;
                   }
               } else {
                   queryVarNames.query.easting = name;
@@ -2003,9 +2021,9 @@ M.TemplatedLayer = L.Layer.extend({
             case ('northing'):
               if (position) {
                 if (position.match(/top-.*?/i)) {
-                  queryVarNames.query.top = name;
+                  queryVarNames.query.maptop = name;
                 } else if (position.match(/bottom-.*?/i)) {
-                  queryVarNames.query.bottom = name;
+                  queryVarNames.query.mapbottom = name;
                 }
               } else {
                 queryVarNames.query.northing = name;
@@ -2015,9 +2033,17 @@ M.TemplatedLayer = L.Layer.extend({
         } else if (type === "location" && units === "map" || units === "tile") {
           // <input name="..." type="location" units="map" axis="i|j"/>
           if (axis === "i") {
-            queryVarNames.query.i = name;
+            if (units === "tile") {
+              queryVarNames.query.tilei = name;
+            } else {
+              queryVarNames.query.mapi = name;
+            }
           } else if (axis === "j") {
-            queryVarNames.query.j = name;
+            if (units === "tile") {
+              queryVarNames.query.tilej = name;
+            } else {
+              queryVarNames.query.mapj = name;
+            }
           }
         } else if (type === "location" && units === "tcrs") {
           if (axis === "x") {
@@ -2117,10 +2143,14 @@ M.TemplatedLayer = L.Layer.extend({
           
           
       var tcrsClickLoc = map.getPixelOrigin().add(e.layerPoint),
-          tileMatrixClickLoc = tcrsClickLoc.divideBy(256).floor();
-
-      obj[template.query.i] = tcrsClickLoc.x.toFixed() - (tileMatrixClickLoc.x * 256);
-      obj[template.query.j] = tcrsClickLoc.y.toFixed() - (tileMatrixClickLoc.y * 256);
+          tileMatrixClickLoc = tcrsClickLoc.divideBy(256).floor(),
+          tileBounds = new L.Bounds(tcrsClickLoc.divideBy(256).floor().multiplyBy(256), tcrsClickLoc.divideBy(256).ceil().multiplyBy(256));
+  
+      // all of the following are locations that might be used in a query, I think.
+      obj[template.query.tilei] = tcrsClickLoc.x.toFixed() - (tileMatrixClickLoc.x * 256);
+      obj[template.query.tilej] = tcrsClickLoc.y.toFixed() - (tileMatrixClickLoc.y * 256);
+      obj[template.query.mapi] = e.containerPoint.x.toFixed();
+      obj[template.query.mapj] = e.containerPoint.y.toFixed();
       
       obj[template.query.col] = tileMatrixClickLoc.x;
       obj[template.query.row] = tileMatrixClickLoc.y;
@@ -2135,14 +2165,19 @@ M.TemplatedLayer = L.Layer.extend({
       obj[template.query.zoom] = zoom;
       obj[template.query.width] = map.getSize().x;
       obj[template.query.height] = map.getSize().y;
-      obj[template.query.bottom] = tcrs2pcrs(bounds.max).y;
-      obj[template.query.left] = tcrs2pcrs(bounds.min).x;
-      obj[template.query.top] = tcrs2pcrs(bounds.min).y;
-      obj[template.query.right] = tcrs2pcrs(bounds.max).x;
+      obj[template.query.mapbottom] = tcrs2pcrs(bounds.max).y;
+      obj[template.query.mapleft] = tcrs2pcrs(bounds.min).x;
+      obj[template.query.maptop] = tcrs2pcrs(bounds.min).y;
+      obj[template.query.mapright] = tcrs2pcrs(bounds.max).x;
+      
+      obj[template.query.tilebottom] = tcrs2pcrs(tileBounds.max).y;
+      obj[template.query.tileleft] = tcrs2pcrs(tileBounds.min).x;
+      obj[template.query.tiletop] = tcrs2pcrs(tileBounds.min).y;
+      obj[template.query.tileright] = tcrs2pcrs(tileBounds.max).x;
       // add hidden or other variables that may be present into the values to
       // be processed by L.Util.template below.
       for (var v in template.query) {
-          if (["i","j","row","col","x","y","easting","northing","width","height","zoom","left","right","top","bottom"].indexOf(v) < 0) {
+          if (["mapi","mapj","tilei","tilej","row","col","x","y","easting","northing","width","height","zoom","mapleft","mapright",",maptop","mapbottom","tileleft","tileright","tiletop","tilebottom"].indexOf(v) < 0) {
               obj[v] = template.query[v];
           }
       }
