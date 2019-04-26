@@ -2121,12 +2121,22 @@ M.TemplatedLayer = L.Layer.extend({
     // json, but also html can do this too.  There seems to be a max width
     // that a popup will take, after which if your content is too wide you will
     // have to do something like this.
-    var popup = L.popup({autoPan: false, maxHeight: map.getSize().y - 20, className: "mapml-popup-overflow"});
+    // 
+    // THE FOLLOWING CLASS NAME IS NECESSARY TO GET A REASONABLE FORMATTING OF
+    // THE OUTPUT FOR IDENTIFY ON THE ABORIGINAL POP LAYER, BUT FOR SOME REASON
+    // THE LITTLE TRIANGULAR POINT ON THE BOTTOM OF A POPUP IS OBLITERATED BY IT
+    // NEED TO FIGURE OUT HOW TO SCOPE THE STYLES RETURNED BY AN HTML RESPONSE
+    // INTO THE POPUP EXCLUSIVELY, AND TO NOT AFFECT STUFF LIKE THE LITTE POINT
+    // ON THE POPUP WHICH INCIDENTALLY HAS ITS OWN CONTAINER AND STYLE (SEARCH
+    // ON POPUP-TIP IN THE LEAFLET STYLES.
+    //  className: "mapml-popup-overflow"
+    var popup = L.popup({autoPan: true, maxHeight: (map.getSize().y * 0.5) - 50});
     // bind the popup to this layer so that when the layer is added/removed
     // the popup will disappear automagically. Binding also allows other event
     // handlers (e.g. onRemove) to clear click event handlers from 'this' without
     // having access to the specific handler.
     this.bindPopup(popup);
+    var container = this._container;
     function handleClick(e) {
       // need to blank out the data from the last popping up to ensure repeated
       // info from last query doesn't appear in a different location
@@ -2181,24 +2191,83 @@ M.TemplatedLayer = L.Layer.extend({
               obj[v] = template.query[v];
           }
       }
-      popup.setContent('<a target="_blank" href="'+L.Util.template(template.template, obj)+'">'+template.query.title+'</a>');
-//      fetch(L.Util.template(template.template, obj),{redirect: 'follow'}).then(
-//          function(response) {
-//            if (response.status !== 200) {
-//              console.log('Looks like there was a problem. Status Code: ' +
-//                response.status);
-//            }
-//
-//             //Examine the text in the response
-//            return response.text();
-//          }
-//        ).then(function(data) {
-//              popup.setContent(data);
-//        }).catch(function(err) {
-//          console.log('Fetch Error :-S', err);
-//        });
-      
+      //popup.setContent('<a target="_blank" href="'+L.Util.template(template.template, obj)+'">'+template.query.title+'</a>');
+      fetch(L.Util.template(template.template, obj),{redirect: 'follow'}).then(
+          function(response) {
+            if (response.status >= 200 && response.status < 300) {
+              return Promise.resolve(response);
+            } else {
+              console.log('Looks like there was a problem. Status Code: ' + response.status);
+              return Promise.reject(response);
+            }
+          }).then(function(response) {
+            var contenttype = response.headers.get("Content-Type");
+            if ( contenttype === "text/mapml") {
+              return handleMapMLResponse(response);
+            } else {
+              return handleHTMLResponse(response);
+            }
+          }).catch(function(err) {
+            console.log('Fetch Error :-S', err);
+          });
       popup.setLatLng(e.latlng).openOn(map);
+    }
+    function handleMapMLResponse(response) {
+      return response.text()
+              .then(mapml => {
+                  var _unproject = L.bind(map.options.crs.unproject, map.options.crs);
+                  function _coordsToLatLng(coords) {
+                      return _unproject(L.point(coords));
+                  };
+                  var parser = new DOMParser(),
+                      doc = parser.parseFromString(mapml, "application/xml"),
+                      f = M.mapMlFeatures(doc, {
+                      // pass the vector layer a renderer of its own, otherwise leaflet
+                      // puts everything into the overlayPane
+                      renderer: L.svg(),
+                      // pass the vector layer the container for the parent into which
+                      // it will append its own container for rendering into
+                      pane: container,
+                      color: 'yellow',
+                      // instead of unprojecting and then projecting and scaling,
+                      // a much smarter approach would be to scale at the current
+                      // zoom
+                      coordsToLatLng: _coordsToLatLng
+//                      imagePath: this.options.imagePath,
+//                      onEachFeature: function(props, geometry) {
+//                        // need to parse as HTML to preserve semantics and styles
+//                        var c = document.createElement('div');
+//                        c.insertAdjacentHTML('afterbegin', props.innerHTML);
+//                        geometry.bindPopup(c, {autoPan:true});
+//                      }
+                  });
+                  f.addTo(map);
+                  
+                  var c = document.createElement('div'),
+                      props = doc.querySelector('feature properties');
+                  c.insertAdjacentHTML('afterbegin', props.innerHTML);
+                  // maybe the content should first be wrapped in an iframe?
+                  f.bindPopup(c,{autoPan: true, maxHeight: (map.getSize().y * 0.5) - 50}).openPopup();
+//        popup.setContent(c);                  
+//                  f.bindPopup(popup);
+                  f.once('popupclose', f.remove);
+
+                  // TODO 
+                  // maybe the content should first be wrapped in an iframe?
+                  // parse the feature
+                  // popup.setContent(c);
+      });
+    }
+    function handleHTMLResponse(response) {
+      return response.text()
+              .then(html => {
+                  var parser = new DOMParser(),
+                      doc = parser.parseFromString(html, "text/html").querySelector('body');
+                  var c = document.createElement('div');
+                  c.insertAdjacentHTML('afterbegin', doc.innerHTML);
+                  // maybe the content should first be wrapped in an iframe?
+                  popup.setContent(c);
+      });
     }
   },
 //  setZIndex: function (zIndex) {
@@ -2842,8 +2911,13 @@ L.extend(M.MapMLFeatures, {
         latlngs = this.coordsToLatLngs(coordinates, 0, coordsToLatLng);
         return new L.Polyline(latlngs, vectorOptions);
       case 'MULTILINESTRING':
-        console.log('MULTILINESTRING Not implemented yet');
-        break;
+        var members = geometry.getElementsByTagName('coordinates'),
+            linestrings = new Array(members.length);
+        for (var member=0;member<members.length;member++) {
+          linestrings[member] = coordinatesToArray(members[member]);
+        }
+        latlngs = this.coordsToLatLngs(linestrings, 2, coordsToLatLng);
+        return new L.Polyline(latlngs, vectorOptions);
       case 'POLYGON':
         var rings = geometry.getElementsByTagName('coordinates');
         latlngs = this.coordsToLatLngs(coordinatesToArray(rings), 1, coordsToLatLng);
@@ -2877,7 +2951,7 @@ L.extend(M.MapMLFeatures, {
       var a = new Array(coordinates.length);
       for (var i=0;i<a.length;i++) {
         a[i]=[];
-        coordinates[i].textContent.match(/(\S+\s+\S+)/gim).forEach(splitCoordinate, a[i]);
+        (coordinates[i] || coordinates).textContent.match(/(\S+\s+\S+)/gim).forEach(splitCoordinate, a[i]);
       }
       return a;
     }
