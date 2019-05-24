@@ -45,7 +45,28 @@ var M = {};
 window.M = M;
 
 (function () {
-    M.mime = "text/mapml";
+  M.detectImagePath = function (container) {
+    // this relies on the CSS style leaflet-default-icon-path containing a 
+    // relative url() that leads to a valid icon file.  Since that depends on
+    // how all of this stuff is deployed (i.e. custom element or as leaflet-plugin)
+    // also, because we're using 'shady DOM' api, the container must be 
+    // a shady dom container, because the custom element tags it with added
+    // style-scope ... and related classes.
+   var el = L.DomUtil.create('div',  'leaflet-default-icon-path', container);
+   var path = L.DomUtil.getStyle(el, 'background-image') ||
+              L.DomUtil.getStyle(el, 'backgroundImage');	// IE8
+
+   Polymer.dom(container).removeChild(el);
+
+   if (path === null || path.indexOf('url') !== 0) {
+    path = '';
+   } else {
+    path = path.replace(/^url\(["']?/, '').replace(/marker-icon\.png["']?\)$/, '');
+   }
+
+   return path;
+  };
+  M.mime = "text/mapml";
     M.CBMTILE = new L.Proj.CRS('EPSG:3978',
   '+proj=lcc +lat_1=49 +lat_2=77 +lat_0=49 +lon_0=-95 +x_0=0 +y_0=0 +ellps=GRS80 +datum=NAD83 +units=m +no_defs',
   {
@@ -339,6 +360,10 @@ M.MapMLLayer = L.Layer.extend({
         // to set the extent, but the map won't be available until the <layer>
         // element is attached to the <map> element, wait for that to happen.
         this.on('attached', this._validateExtent, this );
+        // weirdness.  options is actually undefined here, despite the hardcoded
+        // options above. If you use this.options, you see the options defined
+        // above.  Not going to change this, but failing to understand ATM.
+        // may revisit some time.
         L.setOptions(this, options);
     },
     setZIndex: function (zIndex) {
@@ -360,27 +385,6 @@ M.MapMLLayer = L.Layer.extend({
     changeOpacity: function(opacity) {
         this._container.style.opacity = opacity;
     },
-    _detectImagePath: function (container) {
-      // this relies on the CSS style leaflet-default-icon-path containing a 
-      // relative url() that leads to a valid icon file.  Since that depends on
-      // how all of this stuff is deployed (i.e. custom element or as leaflet-plugin)
-      // also, because we're using 'shady DOM' api, the container must be 
-      // a shady dom container, because the custom element tags it with added
-      // style-scope ... and related classes.
-     var el = L.DomUtil.create('div',  'leaflet-default-icon-path', container);
-     var path = L.DomUtil.getStyle(el, 'background-image') ||
-                L.DomUtil.getStyle(el, 'backgroundImage');	// IE8
-
-     Polymer.dom(container).removeChild(el);
-
-     if (path === null || path.indexOf('url') !== 0) {
-      path = '';
-     } else {
-      path = path.replace(/^url\(["']?/, '').replace(/marker-icon\.png["']?\)$/, '');
-     }
-
-     return path;
-    },
     onAdd: function (map) {
         this._map = map;
         if (!this._mapmlvectors) {
@@ -392,7 +396,9 @@ M.MapMLLayer = L.Layer.extend({
               // it will append its own container for rendering into
               pane: this._container,
               opacity: this.options.opacity,
-              imagePath: this._detectImagePath(this._map.getContainer()),
+              imagePath: M.detectImagePath(this._map.getContainer()),
+              // each owned child layer gets a reference to the root layer
+              _leafletLayer: this,
               onEachFeature: function(properties, geometry) {
                 // need to parse as HTML to preserve semantics and styles
                 var c = document.createElement('div');
@@ -411,7 +417,9 @@ M.MapMLLayer = L.Layer.extend({
         // content will be maintained
         
         if (!this._tileLayer) {
-          this._tileLayer = M.mapMLTileLayer(this.href?this.href:this._href, {pane: this._container});
+          this._tileLayer = M.mapMLTileLayer(this.href?this.href:this._href, 
+          {pane: this._container,
+           _leafletLayer: this});
         }
         this._tileLayer._mapmlTileContainer = this._mapmlTileContainer;
         map.addLayer(this._tileLayer);       
@@ -421,12 +429,20 @@ M.MapMLLayer = L.Layer.extend({
          * info received from mapml server. */
         if (this._extent) {
             if (this._templateVars) {
-              this._templatedLayer = M.templatedLayer(this._templateVars, {pane: this._container,imagePath: this._detectImagePath(this._map.getContainer())}).addTo(map);
+              this._templatedLayer = M.templatedLayer(this._templateVars, 
+              { pane: this._container,
+                imagePath: M.detectImagePath(this._map.getContainer()),
+                _leafletLayer: this
+              }).addTo(map);
             }
         } else {
             this.once('extentload', function() {
                 if (this._templateVars) {
-                  this._templatedLayer = M.templatedLayer(this._templateVars, {pane: this._container,imagePath: this._detectImagePath(this._map.getContainer())}).addTo(map);
+                  this._templatedLayer = M.templatedLayer(this._templateVars, 
+                  { pane: this._container,
+                    imagePath: M.detectImagePath(this._map.getContainer()),
+                    _leafletLayer: this
+                  }).addTo(map);
                 }
               }, this);
             // if we get to this point and there is no this._extent, it means
@@ -2115,33 +2131,15 @@ M.TemplatedLayer = L.Layer.extend({
       map.on('click', handleClick, this);
     }
 
-    // this needs a custom className as well as a selector in mapml.css in order
-    // that the content of the popup does not overflow onto the map, but instead
-    // gets a scrollbar.  This is particularly so when the content returned is
-    // json, but also html can do this too.  There seems to be a max width
-    // that a popup will take, after which if your content is too wide you will
-    // have to do something like this.
-    // 
-    // THE FOLLOWING CLASS NAME IS NECESSARY TO GET A REASONABLE FORMATTING OF
-    // THE OUTPUT FOR IDENTIFY ON THE ABORIGINAL POP LAYER, BUT FOR SOME REASON
-    // THE LITTLE TRIANGULAR POINT ON THE BOTTOM OF A POPUP IS OBLITERATED BY IT
-    // NEED TO FIGURE OUT HOW TO SCOPE THE STYLES RETURNED BY AN HTML RESPONSE
-    // INTO THE POPUP EXCLUSIVELY, AND TO NOT AFFECT STUFF LIKE THE LITTE POINT
-    // ON THE POPUP WHICH INCIDENTALLY HAS ITS OWN CONTAINER AND STYLE (SEARCH
-    // ON POPUP-TIP IN THE LEAFLET STYLES.
-    //  className: "mapml-popup-overflow"
-    var popup = L.popup({autoPan: true, maxHeight: (map.getSize().y * 0.5) - 50});
+    var popupOptions = {autoPan: true, maxHeight: (map.getSize().y * 0.5) - 50};
     // bind the popup to this layer so that when the layer is added/removed
     // the popup will disappear automagically. Binding also allows other event
     // handlers (e.g. onRemove) to clear click event handlers from 'this' without
     // having access to the specific handler.
-    this.bindPopup(popup);
     var container = this._container;
     function handleClick(e) {
-      // need to blank out the data from the last popping up to ensure repeated
-      // info from last query doesn't appear in a different location
-      popup.setContent(' ');
       var obj = {},
+          layer = this,
           template = this._queries[0],
           bounds = e.target.getPixelBounds(),
           zoom = e.target.getZoom(),
@@ -2203,71 +2201,59 @@ M.TemplatedLayer = L.Layer.extend({
           }).then(function(response) {
             var contenttype = response.headers.get("Content-Type");
             if ( contenttype === "text/mapml") {
-              return handleMapMLResponse(response);
+              return handleMapMLResponse(response, e.latlng);
             } else {
-              return handleHTMLResponse(response);
+              return handleHTMLResponse(response, layer, e.latlng);
             }
           }).catch(function(err) {
             console.log('Fetch Error :-S', err);
           });
-      popup.setLatLng(e.latlng).openOn(map);
     }
-    function handleMapMLResponse(response) {
-      return response.text()
-              .then(mapml => {
-                  var _unproject = L.bind(map.options.crs.unproject, map.options.crs);
-                  function _coordsToLatLng(coords) {
-                      return _unproject(L.point(coords));
-                  };
-                  var parser = new DOMParser(),
-                      doc = parser.parseFromString(mapml, "application/xml"),
-                      f = M.mapMlFeatures(doc, {
-                      // pass the vector layer a renderer of its own, otherwise leaflet
-                      // puts everything into the overlayPane
-                      renderer: L.svg(),
-                      // pass the vector layer the container for the parent into which
-                      // it will append its own container for rendering into
-                      pane: container,
-                      color: 'yellow',
-                      // instead of unprojecting and then projecting and scaling,
-                      // a much smarter approach would be to scale at the current
-                      // zoom
-                      coordsToLatLng: _coordsToLatLng
-//                      imagePath: this.options.imagePath,
-//                      onEachFeature: function(props, geometry) {
-//                        // need to parse as HTML to preserve semantics and styles
-//                        var c = document.createElement('div');
-//                        c.insertAdjacentHTML('afterbegin', props.innerHTML);
-//                        geometry.bindPopup(c, {autoPan:true});
-//                      }
-                  });
-                  f.addTo(map);
-                  
-                  var c = document.createElement('div'),
-                      props = doc.querySelector('feature properties');
-                  c.insertAdjacentHTML('afterbegin', props.innerHTML);
-                  // maybe the content should first be wrapped in an iframe?
-                  f.bindPopup(c,{autoPan: true, maxHeight: (map.getSize().y * 0.5) - 50}).openPopup();
-//        popup.setContent(c);                  
-//                  f.bindPopup(popup);
-                  f.once('popupclose', f.remove);
+    function handleMapMLResponse(response, loc) {
+        return response.text().then(mapml => {
+            var _unproject = L.bind(map.options.crs.unproject, map.options.crs);
+            function _coordsToLatLng(coords) {
+                return _unproject(L.point(coords));
+            }
+            var parser = new DOMParser(),
+                doc = parser.parseFromString(mapml, "application/xml"),
+                f = M.mapMlFeatures(doc, {
+                // pass the vector layer a renderer of its own, otherwise leaflet
+                // puts everything into the overlayPane
+                renderer: L.svg(),
+                // pass the vector layer the container for the parent into which
+                // it will append its own container for rendering into
+                pane: container,
+                color: 'yellow',
+                // instead of unprojecting and then projecting and scaling,
+                // a much smarter approach would be to scale at the current
+                // zoom
+                coordsToLatLng: _coordsToLatLng,
+                imagePath: M.detectImagePath(map.getContainer())
+            });
+            f.addTo(map);
 
-                  // TODO 
-                  // maybe the content should first be wrapped in an iframe?
-                  // parse the feature
-                  // popup.setContent(c);
-      });
+            var c = document.createElement('div'),
+                props = doc.querySelector('feature properties');
+            c.insertAdjacentHTML('afterbegin', props.innerHTML);
+            // maybe the content should first be wrapped in an iframe?
+            // passing a latlng to the popup is necessary for when there is no
+            // geometry / null geometry
+            f.bindPopup(c, popupOptions).openPopup(loc);
+            f.once('popupclose', f.remove);
+            // bug here: if the layer is cleared from the layer control,
+            // the popup remains on screen... how to fix?
+        });
     }
-    function handleHTMLResponse(response) {
-      return response.text()
-              .then(html => {
-                  var parser = new DOMParser(),
-                      doc = parser.parseFromString(html, "text/html").querySelector('body');
-                  var c = document.createElement('div');
-                  c.insertAdjacentHTML('afterbegin', doc.innerHTML);
-                  // maybe the content should first be wrapped in an iframe?
-                  popup.setContent(c);
-      });
+    function handleHTMLResponse(response, layer, loc) {
+        return response.text().then(html => {
+            var parser = new DOMParser(),
+                doc = parser.parseFromString(html, "text/html").querySelector('body');
+            var c = document.createElement('div');
+            c.insertAdjacentHTML('afterbegin', doc.innerHTML);
+            // maybe the content should first be wrapped in an iframe?
+            layer.bindPopup(c, popupOptions).openPopup(loc);
+        });
     }
   },
 //  setZIndex: function (zIndex) {
@@ -2881,7 +2867,7 @@ M.MapMLFeatures = L.FeatureGroup.extend({
 L.extend(M.MapMLFeatures, {
 	 geometryToLayer: function (mapml, pointToLayer, coordsToLatLng, vectorOptions) {
     var geometry = mapml.tagName.toUpperCase() === 'FEATURE' ? mapml.getElementsByTagName('geometry')[0] : mapml,
-        latlng, latlngs, coordinates;
+        latlng, latlngs, coordinates, member, members, linestrings;
 
     coordsToLatLng = coordsToLatLng || this.coordsToLatLng;
 
@@ -2911,9 +2897,9 @@ L.extend(M.MapMLFeatures, {
         latlngs = this.coordsToLatLngs(coordinates, 0, coordsToLatLng);
         return new L.Polyline(latlngs, vectorOptions);
       case 'MULTILINESTRING':
-        var members = geometry.getElementsByTagName('coordinates'),
-            linestrings = new Array(members.length);
-        for (var member=0;member<members.length;member++) {
+        members = geometry.getElementsByTagName('coordinates');
+        linestrings = new Array(members.length);
+        for (member=0;member<members.length;member++) {
           linestrings[member] = coordinatesToArray(members[member]);
         }
         latlngs = this.coordsToLatLngs(linestrings, 2, coordsToLatLng);
@@ -2923,9 +2909,9 @@ L.extend(M.MapMLFeatures, {
         latlngs = this.coordsToLatLngs(coordinatesToArray(rings), 1, coordsToLatLng);
         return new L.Polygon(latlngs, vectorOptions);
       case 'MULTIPOLYGON':
-        var members = geometry.getElementsByTagName('polygon'),
-            polygons = new Array(members.length);
-        for (var member=0;member<members.length;member++) {
+        members = geometry.getElementsByTagName('polygon');
+        var polygons = new Array(members.length);
+        for (member=0;member<members.length;member++) {
           polygons[member] = coordinatesToArray(members[member].querySelectorAll('coordinates'));
         }
         latlngs = this.coordsToLatLngs(polygons, 2, coordsToLatLng);
