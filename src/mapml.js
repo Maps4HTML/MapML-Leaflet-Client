@@ -321,6 +321,34 @@ M.Util = {
   }
 };
 M.coordsToArray = M.Util.coordsToArray;
+M.QueryHandler = L.Handler.extend({
+    addHooks: function() {
+        L.DomEvent.on(this._map, 'click', this._queryLayer, this);
+    },
+
+    removeHooks: function() {
+        L.DomEvent.off(this._map, 'click', this._queryLayer, this);
+    },
+    
+    _queryLayer: function(event) {
+        // this could be made more readable, right?
+        this._map.eachLayer(function (layer) {
+            var queryable = false;
+            if (layer._layerEl && layer._templateVars) {
+                for (var i=0;i < layer._templateVars.length;i++) {
+                  if (layer._templateVars[i].type === 'query') {
+                    queryable = true;
+                    break;
+                  }
+                }
+                if (queryable) {
+                    layer._templatedLayer.handleClick(event);
+                }
+            }      
+        });
+    }
+});
+L.Map.addInitHook('addHandler', 'query', M.QueryHandler);
 M.MapMLLayer = L.Layer.extend({
     // zIndex has to be set, for the case where the layer is added to the
     // map before the layercontrol is used to control it (where autoZindex is used)
@@ -337,6 +365,7 @@ M.MapMLLayer = L.Layer.extend({
         if (href) {
             this._href = href;
         }
+        this._layerEl = content;
         var mapml = content.querySelector('image,feature,tile,extent') ? true : false;
         if (mapml) {
             this._content = content;
@@ -2120,24 +2149,7 @@ M.TemplatedLayer = L.Layer.extend({
       }
     }
   },
-  onAdd: function (map) {
-    for (var i=0;i<this._templates.length;i++) {
-      if (this._templates[i].type !== 'query') {
-        map.addLayer(this._templates[i].layer);
-      }
-    }
-//    this.setZIndex(this.options.zIndex);
-    if (this._queries) {
-      map.on('click', handleClick, this);
-    }
-
-    var popupOptions = {autoPan: true, maxHeight: (map.getSize().y * 0.5) - 50};
-    // bind the popup to this layer so that when the layer is added/removed
-    // the popup will disappear automagically. Binding also allows other event
-    // handlers (e.g. onRemove) to clear click event handlers from 'this' without
-    // having access to the specific handler.
-    var container = this._container;
-    function handleClick(e) {
+  handleClick(e) {
       var obj = {},
           layer = this,
           template = this._queries[0],
@@ -2145,10 +2157,11 @@ M.TemplatedLayer = L.Layer.extend({
           zoom = e.target.getZoom(),
           map = e.target,
           crs = map.options.crs,
+          container = layer._container,
+          popupOptions = {autoPan: true, maxHeight: (layer._map.getSize().y * 0.5) - 50},
           tcrs2pcrs = function (c) {
             return crs.transformation.untransform(c,crs.scale(zoom));
           };
-          
           
       var tcrsClickLoc = map.getPixelOrigin().add(e.layerPoint),
           tileMatrixClickLoc = tcrsClickLoc.divideBy(256).floor(),
@@ -2208,54 +2221,62 @@ M.TemplatedLayer = L.Layer.extend({
           }).catch(function(err) {
             console.log('Fetch Error :-S', err);
           });
-    }
-    function handleMapMLResponse(response, loc) {
-        return response.text().then(mapml => {
-            var _unproject = L.bind(map.options.crs.unproject, map.options.crs);
-            function _coordsToLatLng(coords) {
-                return _unproject(L.point(coords));
-            }
-            var parser = new DOMParser(),
-                doc = parser.parseFromString(mapml, "application/xml"),
-                f = M.mapMlFeatures(doc, {
-                // pass the vector layer a renderer of its own, otherwise leaflet
-                // puts everything into the overlayPane
-                renderer: L.svg(),
-                // pass the vector layer the container for the parent into which
-                // it will append its own container for rendering into
-                pane: container,
-                color: 'yellow',
-                // instead of unprojecting and then projecting and scaling,
-                // a much smarter approach would be to scale at the current
-                // zoom
-                coordsToLatLng: _coordsToLatLng,
-                imagePath: M.detectImagePath(map.getContainer())
-            });
-            f.addTo(map);
+        function handleMapMLResponse(response, loc) {
+            return response.text().then(mapml => {
+                var _unproject = L.bind(map.options.crs.unproject, map.options.crs);
+                function _coordsToLatLng(coords) {
+                    return _unproject(L.point(coords));
+                }
+                var parser = new DOMParser(),
+                    doc = parser.parseFromString(mapml, "application/xml"),
+                    f = M.mapMlFeatures(doc, {
+                    // pass the vector layer a renderer of its own, otherwise leaflet
+                    // puts everything into the overlayPane
+                    renderer: L.svg(),
+                    // pass the vector layer the container for the parent into which
+                    // it will append its own container for rendering into
+                    pane: container,
+                    color: 'yellow',
+                    // instead of unprojecting and then projecting and scaling,
+                    // a much smarter approach would be to scale at the current
+                    // zoom
+                    coordsToLatLng: _coordsToLatLng,
+                    imagePath: M.detectImagePath(map.getContainer())
+                });
+                f.addTo(map);
 
-            var c = document.createElement('div'),
-                props = doc.querySelector('feature properties');
-            c.insertAdjacentHTML('afterbegin', props.innerHTML);
-            // maybe the content should first be wrapped in an iframe?
-            // passing a latlng to the popup is necessary for when there is no
-            // geometry / null geometry
-            f.bindPopup(c, popupOptions).openPopup(loc);
-            f.once('popupclose', f.remove);
-            // bug here: if the layer is cleared from the layer control,
-            // the popup remains on screen... how to fix?
-        });
-    }
-    function handleHTMLResponse(response, layer, loc) {
-        return response.text().then(html => {
-            var parser = new DOMParser(),
-                doc = parser.parseFromString(html, "text/html").querySelector('body');
-            var c = document.createElement('div');
-            c.insertAdjacentHTML('afterbegin', doc.innerHTML);
-            // maybe the content should first be wrapped in an iframe?
-            layer.bindPopup(c, popupOptions).openPopup(loc);
-        });
-    }
-  },
+                var c = document.createElement('div'),
+                    props = doc.querySelector('feature properties');
+                c.insertAdjacentHTML('afterbegin', props.innerHTML);
+                // maybe the content should first be wrapped in an iframe?
+                // passing a latlng to the popup is necessary for when there is no
+                // geometry / null geometry
+//                f.once('popupclose');
+                layer.bindPopup(c, popupOptions).openPopup(loc);
+                var p = layer.getPopup();
+                p.on('close', function() {console.log('removing layer on popupclose')});
+                // bug here: if the layer is cleared from the layer control,
+                // the popup remains on screen... how to fix?
+            });
+        }
+        function handleHTMLResponse(response, layer, loc) {
+            return response.text().then(html => {
+                var parser = new DOMParser(),
+                    doc = parser.parseFromString(html, "text/html").querySelector('body');
+                var c = document.createElement('div');
+                c.insertAdjacentHTML('afterbegin', doc.innerHTML);
+                // maybe the content should first be wrapped in an iframe?
+                layer.bindPopup(c, popupOptions).openPopup(loc);
+            });
+        }
+    },
+    onAdd: function (map) {
+      for (var i=0;i<this._templates.length;i++) {
+        if (this._templates[i].type !== 'query') {
+          map.addLayer(this._templates[i].layer);
+        }
+      }
+    },
 //  setZIndex: function (zIndex) {
 //      this.options.zIndex = zIndex;
 //      this._updateZIndex();
@@ -2274,7 +2295,6 @@ M.TemplatedLayer = L.Layer.extend({
         map.removeLayer(this._templates[i].layer);
       }
     }
-    map.off('click', null, this);
   }
 });
 M.templatedLayer = function(templates, options) {
