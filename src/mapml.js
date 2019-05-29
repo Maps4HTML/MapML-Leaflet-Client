@@ -323,29 +323,31 @@ M.Util = {
 M.coordsToArray = M.Util.coordsToArray;
 M.QueryHandler = L.Handler.extend({
     addHooks: function() {
-        L.DomEvent.on(this._map, 'click', this._queryLayer, this);
+        // get a reference to the actual <map> element, so we can 
+        // use its layers property to iterate the layers from top down
+        // evaluating if they are 'on the map' (enabled)
+        L.setOptions(this, {mapEl: this._map.options.mapEl});
+        L.DomEvent.on(this._map, 'click', this._queryTopLayer, this);
     },
 
     removeHooks: function() {
-        L.DomEvent.off(this._map, 'click', this._queryLayer, this);
+        L.DomEvent.off(this._map, 'click', this._queryTopLayer, this);
     },
-    
-    _queryLayer: function(event) {
-        // this could be made more readable, right?
-        this._map.eachLayer(function (layer) {
-            var queryable = false;
-            if (layer._layerEl && layer._templateVars) {
-                for (var i=0;i < layer._templateVars.length;i++) {
-                  if (layer._templateVars[i].type === 'query') {
-                    queryable = true;
-                    break;
-                  }
-                }
-                if (queryable) {
-                    layer._templatedLayer.handleClick(event);
-                }
-            }      
-        });
+    _getTopQueryableLayer: function() {
+        var layers = this.options.mapEl.layers;
+        // work backwards in document order (top down)
+        for (var l=layers.length-1;l>=0;l--) {
+          var mapmlLayer = layers[l]._layer;
+          if (layers[l].checked && mapmlLayer.queryable) {
+              return mapmlLayer;
+          }
+        }
+    },
+    _queryTopLayer: function(event) {
+        var layer = this._getTopQueryableLayer();
+        if (layer) {
+            layer._templatedLayer.handleClick(event);
+        }
     }
 });
 L.Map.addInitHook('addHandler', 'query', M.QueryHandler);
@@ -918,6 +920,9 @@ M.MapMLLayer = L.Layer.extend({
                       }
                     }
                     if (template && vcount.length === inputs.length) {
+                      if (ttype === 'query') {
+                        layer.queryable = true;
+                      }
                       // template has a matching input for every variable reference {varref}
                       layer._templateVars.push({template:template, title:title, type: ttype, values: inputs});
                     }
