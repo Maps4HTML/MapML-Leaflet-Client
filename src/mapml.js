@@ -2251,12 +2251,10 @@ M.TemplatedLayer = L.Layer.extend({
                 // maybe the content should first be wrapped in an iframe?
                 // passing a latlng to the popup is necessary for when there is no
                 // geometry / null geometry
-//                f.once('popupclose');
                 layer.bindPopup(c, popupOptions).openPopup(loc);
-                var p = layer.getPopup();
-                p.on('close', function() {console.log('removing layer on popupclose')});
-                // bug here: if the layer is cleared from the layer control,
-                // the popup remains on screen... how to fix?
+                layer.on('popupclose', function() {
+                    map.removeLayer(f);
+                });
             });
         }
         function handleHTMLResponse(response, layer, loc) {
