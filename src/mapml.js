@@ -328,10 +328,12 @@ M.QueryHandler = L.Handler.extend({
         // evaluating if they are 'on the map' (enabled)
         L.setOptions(this, {mapEl: this._map.options.mapEl});
         L.DomEvent.on(this._map, 'click', this._queryTopLayer, this);
+        L.DomEvent.on(this._map, 'keypress', this._queryTopLayerAtMapCenter, this);
     },
 
     removeHooks: function() {
         L.DomEvent.off(this._map, 'click', this._queryTopLayer, this);
+        L.DomEvent.on(this._map, 'keypress', this._queryTopLayerAtMapCenter, this);
     },
     _getTopQueryableLayer: function() {
         var layers = this.options.mapEl.layers;
@@ -342,6 +344,16 @@ M.QueryHandler = L.Handler.extend({
               return mapmlLayer;
           }
         }
+    },
+    _queryTopLayerAtMapCenter: function (event) {
+        if (event.originalEvent.key === " ") {
+          this._map.fire('click', { 
+              latlng: this._map.getCenter(),
+              layerPoint: this._map.latLngToLayerPoint(this._map.getCenter()),
+              containerPoint: this._map.latLngToContainerPoint(this._map.getCenter())
+          });
+        }
+      
     },
     _queryTopLayer: function(event) {
         var layer = this._getTopQueryableLayer();
@@ -2207,7 +2219,6 @@ M.TemplatedLayer = L.Layer.extend({
               obj[v] = template.query[v];
           }
       }
-      //popup.setContent('<a target="_blank" href="'+L.Util.template(template.template, obj)+'">'+template.query.title+'</a>');
       fetch(L.Util.template(template.template, obj),{redirect: 'follow'}).then(
           function(response) {
             if (response.status >= 200 && response.status < 300) {
@@ -2221,10 +2232,10 @@ M.TemplatedLayer = L.Layer.extend({
             if ( contenttype === "text/mapml") {
               return handleMapMLResponse(response, e.latlng);
             } else {
-              return handleHTMLResponse(response, layer, e.latlng);
+              return handleOtherResponse(response, layer, e.latlng);
             }
           }).catch(function(err) {
-            console.log('Fetch Error :-S', err);
+            // no op
           });
         function handleMapMLResponse(response, loc) {
             return response.text().then(mapml => {
@@ -2233,8 +2244,8 @@ M.TemplatedLayer = L.Layer.extend({
                     return _unproject(L.point(coords));
                 }
                 var parser = new DOMParser(),
-                    doc = parser.parseFromString(mapml, "application/xml"),
-                    f = M.mapMlFeatures(doc, {
+                    mapmldoc = parser.parseFromString(mapml, "application/xml"),
+                    f = M.mapMlFeatures(mapmldoc, {
                     // pass the vector layer a renderer of its own, otherwise leaflet
                     // puts everything into the overlayPane
                     renderer: L.svg(),
@@ -2250,10 +2261,11 @@ M.TemplatedLayer = L.Layer.extend({
                 });
                 f.addTo(map);
 
-                var c = document.createElement('div'),
-                    props = doc.querySelector('feature properties');
-                c.insertAdjacentHTML('afterbegin', props.innerHTML);
-                // maybe the content should first be wrapped in an iframe?
+                var c = document.createElement('iframe');
+                c.csp = "script-src 'none'";
+                c.style = "border: none";
+                c.srcdoc = mapmldoc.querySelector('feature properties').innerHTML;
+                
                 // passing a latlng to the popup is necessary for when there is no
                 // geometry / null geometry
                 layer.bindPopup(c, popupOptions).openPopup(loc);
@@ -2262,13 +2274,12 @@ M.TemplatedLayer = L.Layer.extend({
                 });
             });
         }
-        function handleHTMLResponse(response, layer, loc) {
-            return response.text().then(html => {
-                var parser = new DOMParser(),
-                    doc = parser.parseFromString(html, "text/html").querySelector('body');
-                var c = document.createElement('div');
-                c.insertAdjacentHTML('afterbegin', doc.innerHTML);
-                // maybe the content should first be wrapped in an iframe?
+        function handleOtherResponse(response, layer, loc) {
+            return response.text().then(text => {
+                var c = document.createElement('iframe');
+                c.csp = "script-src 'none'";
+                c.style = "border: none";
+                c.srcdoc = text;
                 layer.bindPopup(c, popupOptions).openPopup(loc);
             });
         }
