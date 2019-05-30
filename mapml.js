@@ -79,13 +79,35 @@
  * Title to copyright in this work will at all times remain with copyright holders.
  */
 /* global L, Node */
+/*jshint esversion: 6 */
 (function (window, document, undefined) {
   
 var M = {};
 window.M = M;
 
 (function () {
-    M.mime = "text/mapml";
+  M.detectImagePath = function (container) {
+    // this relies on the CSS style leaflet-default-icon-path containing a 
+    // relative url() that leads to a valid icon file.  Since that depends on
+    // how all of this stuff is deployed (i.e. custom element or as leaflet-plugin)
+    // also, because we're using 'shady DOM' api, the container must be 
+    // a shady dom container, because the custom element tags it with added
+    // style-scope ... and related classes.
+   var el = L.DomUtil.create('div',  'leaflet-default-icon-path', container);
+   var path = L.DomUtil.getStyle(el, 'background-image') ||
+              L.DomUtil.getStyle(el, 'backgroundImage');	// IE8
+
+   Polymer.dom(container).removeChild(el);
+
+   if (path === null || path.indexOf('url') !== 0) {
+    path = '';
+   } else {
+    path = path.replace(/^url\(["']?/, '').replace(/marker-icon\.png["']?\)$/, '');
+   }
+
+   return path;
+  };
+  M.mime = "text/mapml";
     M.CBMTILE = new L.Proj.CRS('EPSG:3978',
   '+proj=lcc +lat_1=49 +lat_2=77 +lat_0=49 +lon_0=-95 +x_0=0 +y_0=0 +ellps=GRS80 +datum=NAD83 +units=m +no_defs',
   {
@@ -340,6 +362,163 @@ M.Util = {
   }
 };
 M.coordsToArray = M.Util.coordsToArray;
+M.QueryHandler = L.Handler.extend({
+    addHooks: function() {
+        // get a reference to the actual <map> element, so we can 
+        // use its layers property to iterate the layers from top down
+        // evaluating if they are 'on the map' (enabled)
+        L.setOptions(this, {mapEl: this._map.options.mapEl});
+        L.DomEvent.on(this._map, 'click', this._queryTopLayer, this);
+        L.DomEvent.on(this._map, 'keypress', this._queryTopLayerAtMapCenter, this);
+    },
+    removeHooks: function() {
+        L.DomEvent.off(this._map, 'click', this._queryTopLayer, this);
+        L.DomEvent.on(this._map, 'keypress', this._queryTopLayerAtMapCenter, this);
+    },
+    _getTopQueryableLayer: function() {
+        var layers = this.options.mapEl.layers;
+        // work backwards in document order (top down)
+        for (var l=layers.length-1;l>=0;l--) {
+          var mapmlLayer = layers[l]._layer;
+          if (layers[l].checked && mapmlLayer.queryable) {
+              return mapmlLayer;
+          }
+        }
+    },
+    _queryTopLayerAtMapCenter: function (event) {
+        if (event.originalEvent.key === " ") {
+          this._map.fire('click', { 
+              latlng: this._map.getCenter(),
+              layerPoint: this._map.latLngToLayerPoint(this._map.getCenter()),
+              containerPoint: this._map.latLngToContainerPoint(this._map.getCenter())
+          });
+        }
+    },
+    _queryTopLayer: function(event) {
+        var layer = this._getTopQueryableLayer();
+        if (layer) {
+            this._query(event, layer);
+        }
+    },
+    _query(e, layer) {
+      var obj = {},
+          template = layer.getQueryTemplates()[0],
+          bounds = e.target.getPixelBounds(),
+          zoom = e.target.getZoom(),
+          map = this._map,
+          crs = map.options.crs,
+          container = layer._container,
+          popupOptions = {autoPan: true, maxHeight: (map.getSize().y * 0.5) - 50},
+          tcrs2pcrs = function (c) {
+            return crs.transformation.untransform(c,crs.scale(zoom));
+          };
+          
+      var tcrsClickLoc = map.getPixelOrigin().add(e.layerPoint),
+          tileMatrixClickLoc = tcrsClickLoc.divideBy(256).floor(),
+          tileBounds = new L.Bounds(tcrsClickLoc.divideBy(256).floor().multiplyBy(256), tcrsClickLoc.divideBy(256).ceil().multiplyBy(256));
+  
+      // all of the following are locations that might be used in a query, I think.
+      obj[template.query.tilei] = tcrsClickLoc.x.toFixed() - (tileMatrixClickLoc.x * 256);
+      obj[template.query.tilej] = tcrsClickLoc.y.toFixed() - (tileMatrixClickLoc.y * 256);
+      obj[template.query.mapi] = e.containerPoint.x.toFixed();
+      obj[template.query.mapj] = e.containerPoint.y.toFixed();
+      
+      obj[template.query.col] = tileMatrixClickLoc.x;
+      obj[template.query.row] = tileMatrixClickLoc.y;
+
+      // whereas the layerPoint is calculated relative to the origin plus / minus any
+      // pan movements so is equal to containerPoint at first before any pans, but
+      // changes as the map pans. 
+      obj[template.query.x] = tcrsClickLoc.x.toFixed();
+      obj[template.query.y] = tcrsClickLoc.y.toFixed();
+      obj[template.query.easting] =  tcrs2pcrs(map.getPixelOrigin().add(e.layerPoint)).x;
+      obj[template.query.northing] = tcrs2pcrs(map.getPixelOrigin().add(e.layerPoint)).y;
+      obj[template.query.zoom] = zoom;
+      obj[template.query.width] = map.getSize().x;
+      obj[template.query.height] = map.getSize().y;
+      obj[template.query.mapbottom] = tcrs2pcrs(bounds.max).y;
+      obj[template.query.mapleft] = tcrs2pcrs(bounds.min).x;
+      obj[template.query.maptop] = tcrs2pcrs(bounds.min).y;
+      obj[template.query.mapright] = tcrs2pcrs(bounds.max).x;
+      
+      obj[template.query.tilebottom] = tcrs2pcrs(tileBounds.max).y;
+      obj[template.query.tileleft] = tcrs2pcrs(tileBounds.min).x;
+      obj[template.query.tiletop] = tcrs2pcrs(tileBounds.min).y;
+      obj[template.query.tileright] = tcrs2pcrs(tileBounds.max).x;
+      // add hidden or other variables that may be present into the values to
+      // be processed by L.Util.template below.
+      for (var v in template.query) {
+          if (["mapi","mapj","tilei","tilej","row","col","x","y","easting","northing","width","height","zoom","mapleft","mapright",",maptop","mapbottom","tileleft","tileright","tiletop","tilebottom"].indexOf(v) < 0) {
+              obj[v] = template.query[v];
+          }
+      }
+      fetch(L.Util.template(template.template, obj),{redirect: 'follow'}).then(
+          function(response) {
+            if (response.status >= 200 && response.status < 300) {
+              return Promise.resolve(response);
+            } else {
+              console.log('Looks like there was a problem. Status Code: ' + response.status);
+              return Promise.reject(response);
+            }
+          }).then(function(response) {
+            var contenttype = response.headers.get("Content-Type");
+            if ( contenttype === "text/mapml") {
+              return handleMapMLResponse(response, e.latlng);
+            } else {
+              return handleOtherResponse(response, layer, e.latlng);
+            }
+          }).catch(function(err) {
+            // no op
+          });
+      function handleMapMLResponse(response, loc) {
+          return response.text().then(mapml => {
+              var _unproject = L.bind(map.options.crs.unproject, map.options.crs);
+              function _coordsToLatLng(coords) {
+                  return _unproject(L.point(coords));
+              }
+              var parser = new DOMParser(),
+                  mapmldoc = parser.parseFromString(mapml, "application/xml"),
+                  f = M.mapMlFeatures(mapmldoc, {
+                  // pass the vector layer a renderer of its own, otherwise leaflet
+                  // puts everything into the overlayPane
+                  renderer: L.svg(),
+                  // pass the vector layer the container for the parent into which
+                  // it will append its own container for rendering into
+                  pane: container,
+                  color: 'yellow',
+                  // instead of unprojecting and then projecting and scaling,
+                  // a much smarter approach would be to scale at the current
+                  // zoom
+                  coordsToLatLng: _coordsToLatLng,
+                  imagePath: M.detectImagePath(map.getContainer())
+              });
+              f.addTo(map);
+
+              var c = document.createElement('iframe');
+              c.csp = "script-src 'none'";
+              c.style = "border: none";
+              c.srcdoc = mapmldoc.querySelector('feature properties').innerHTML;
+
+              // passing a latlng to the popup is necessary for when there is no
+              // geometry / null geometry
+              layer.bindPopup(c, popupOptions).openPopup(loc);
+              layer.on('popupclose', function() {
+                  map.removeLayer(f);
+              });
+          });
+      }
+      function handleOtherResponse(response, layer, loc) {
+          return response.text().then(text => {
+              var c = document.createElement('iframe');
+              c.csp = "script-src 'none'";
+              c.style = "border: none";
+              c.srcdoc = text;
+              layer.bindPopup(c, popupOptions).openPopup(loc);
+          });
+      }
+    }
+});
+L.Map.addInitHook('addHandler', 'query', M.QueryHandler);
 M.MapMLLayer = L.Layer.extend({
     // zIndex has to be set, for the case where the layer is added to the
     // map before the layercontrol is used to control it (where autoZindex is used)
@@ -356,6 +535,7 @@ M.MapMLLayer = L.Layer.extend({
         if (href) {
             this._href = href;
         }
+        this._layerEl = content;
         var mapml = content.querySelector('image,feature,tile,extent') ? true : false;
         if (mapml) {
             this._content = content;
@@ -379,6 +559,10 @@ M.MapMLLayer = L.Layer.extend({
         // to set the extent, but the map won't be available until the <layer>
         // element is attached to the <map> element, wait for that to happen.
         this.on('attached', this._validateExtent, this );
+        // weirdness.  options is actually undefined here, despite the hardcoded
+        // options above. If you use this.options, you see the options defined
+        // above.  Not going to change this, but failing to understand ATM.
+        // may revisit some time.
         L.setOptions(this, options);
     },
     setZIndex: function (zIndex) {
@@ -400,27 +584,6 @@ M.MapMLLayer = L.Layer.extend({
     changeOpacity: function(opacity) {
         this._container.style.opacity = opacity;
     },
-    _detectImagePath: function (container) {
-      // this relies on the CSS style leaflet-default-icon-path containing a 
-      // relative url() that leads to a valid icon file.  Since that depends on
-      // how all of this stuff is deployed (i.e. custom element or as leaflet-plugin)
-      // also, because we're using 'shady DOM' api, the container must be 
-      // a shady dom container, because the custom element tags it with added
-      // style-scope ... and related classes.
-     var el = L.DomUtil.create('div',  'leaflet-default-icon-path', container);
-     var path = L.DomUtil.getStyle(el, 'background-image') ||
-                L.DomUtil.getStyle(el, 'backgroundImage');	// IE8
-
-     Polymer.dom(container).removeChild(el);
-
-     if (path === null || path.indexOf('url') !== 0) {
-      path = '';
-     } else {
-      path = path.replace(/^url\(["']?/, '').replace(/marker-icon\.png["']?\)$/, '');
-     }
-
-     return path;
-    },
     onAdd: function (map) {
         this._map = map;
         if (!this._mapmlvectors) {
@@ -432,7 +595,9 @@ M.MapMLLayer = L.Layer.extend({
               // it will append its own container for rendering into
               pane: this._container,
               opacity: this.options.opacity,
-              imagePath: this._detectImagePath(this._map.getContainer()),
+              imagePath: M.detectImagePath(this._map.getContainer()),
+              // each owned child layer gets a reference to the root layer
+              _leafletLayer: this,
               onEachFeature: function(properties, geometry) {
                 // need to parse as HTML to preserve semantics and styles
                 var c = document.createElement('div');
@@ -451,7 +616,9 @@ M.MapMLLayer = L.Layer.extend({
         // content will be maintained
         
         if (!this._tileLayer) {
-          this._tileLayer = M.mapMLTileLayer(this.href?this.href:this._href, {pane: this._container});
+          this._tileLayer = M.mapMLTileLayer(this.href?this.href:this._href, 
+          {pane: this._container,
+           _leafletLayer: this});
         }
         this._tileLayer._mapmlTileContainer = this._mapmlTileContainer;
         map.addLayer(this._tileLayer);       
@@ -461,12 +628,20 @@ M.MapMLLayer = L.Layer.extend({
          * info received from mapml server. */
         if (this._extent) {
             if (this._templateVars) {
-              this._templatedLayer = M.templatedLayer(this._templateVars, {pane: this._container,imagePath: this._detectImagePath(this._map.getContainer())}).addTo(map);
+              this._templatedLayer = M.templatedLayer(this._templateVars, 
+              { pane: this._container,
+                imagePath: M.detectImagePath(this._map.getContainer()),
+                _leafletLayer: this
+              }).addTo(map);
             }
         } else {
             this.once('extentload', function() {
                 if (this._templateVars) {
-                  this._templatedLayer = M.templatedLayer(this._templateVars, {pane: this._container,imagePath: this._detectImagePath(this._map.getContainer())}).addTo(map);
+                  this._templatedLayer = M.templatedLayer(this._templateVars, 
+                  { pane: this._container,
+                    imagePath: M.detectImagePath(this._map.getContainer()),
+                    _leafletLayer: this
+                  }).addTo(map);
                 }
               }, this);
             // if we get to this point and there is no this._extent, it means
@@ -913,6 +1088,9 @@ M.MapMLLayer = L.Layer.extend({
                       }
                     }
                     if (template && vcount.length === inputs.length) {
+                      if (ttype === 'query') {
+                        layer.queryable = true;
+                      }
                       // template has a matching input for every variable reference {varref}
                       layer._templateVars.push({template:template, title:title, type: ttype, values: inputs});
                     }
@@ -1464,7 +1642,13 @@ M.MapMLLayer = L.Layer.extend({
         var projection = this.getProjection();
         if (!map.options.projection || projection !== 'WGS84' && map.options.projection !== projection) return false;
         return true;
+    },
+    getQueryTemplates: function() {
+        if (this._templatedLayer && this._templatedLayer._queries) {
+          return this._templatedLayer._queries;
+        }
     }
+    
 });
 M.mapMLLayer = function (url, node, options) {
 	return new M.MapMLLayer(url, node ? node : document.createElement('div'), options);
@@ -2150,101 +2334,6 @@ M.TemplatedLayer = L.Layer.extend({
         map.addLayer(this._templates[i].layer);
       }
     }
-//    this.setZIndex(this.options.zIndex);
-    if (this._queries) {
-      map.on('click', handleClick, this);
-    }
-
-    // this needs a custom className as well as a selector in mapml.css in order
-    // that the content of the popup does not overflow onto the map, but instead
-    // gets a scrollbar.  This is particularly so when the content returned is
-    // json, but also html can do this too.  There seems to be a max width
-    // that a popup will take, after which if your content is too wide you will
-    // have to do something like this.
-    var popup = L.popup({autoPan: false, maxHeight: map.getSize().y - 20, className: "mapml-popup-overflow"});
-    // bind the popup to this layer so that when the layer is added/removed
-    // the popup will disappear automagically. Binding also allows other event
-    // handlers (e.g. onRemove) to clear click event handlers from 'this' without
-    // having access to the specific handler.
-    this.bindPopup(popup);
-    function handleClick(e) {
-      // need to blank out the data from the last popping up to ensure repeated
-      // info from last query doesn't appear in a different location
-      popup.setContent(' ');
-      var obj = {},
-          template = this._queries[0],
-          // this might be wrong, even for WMS GetFeatureInfo, because getPixelBounds 
-          // may not return the image size as originally requested, but the image's actual
-          // size on a responsive display.  TBD
-          // further, the bounds required for a GetFeatureInfo request on a tiled WMS
-          // map portrayal are those of the tile, not the overall map (composed of tiles)
-          bounds = e.target.getPixelBounds(),
-          zoom = e.target.getZoom(),
-          map = e.target,
-          crs = map.options.crs,
-          tcrs2pcrs = function (c) {
-            return crs.transformation.untransform(c,crs.scale(zoom));
-          };
-          
-          
-      var tcrsClickLoc = map.getPixelOrigin().add(e.layerPoint),
-          tileMatrixClickLoc = tcrsClickLoc.divideBy(256).floor(),
-          tileBounds = new L.Bounds(tcrsClickLoc.divideBy(256).floor().multiplyBy(256), tcrsClickLoc.divideBy(256).ceil().multiplyBy(256));
-  
-      // all of the following are locations that might be used in a query, I think.
-      obj[template.query.tilei] = tcrsClickLoc.x.toFixed() - (tileMatrixClickLoc.x * 256);
-      obj[template.query.tilej] = tcrsClickLoc.y.toFixed() - (tileMatrixClickLoc.y * 256);
-      obj[template.query.mapi] = e.containerPoint.x.toFixed();
-      obj[template.query.mapj] = e.containerPoint.y.toFixed();
-      
-      obj[template.query.col] = tileMatrixClickLoc.x;
-      obj[template.query.row] = tileMatrixClickLoc.y;
-
-      // whereas the layerPoint is calculated relative to the origin plus / minus any
-      // pan movements so is equal to containerPoint at first before any pans, but
-      // changes as the map pans. 
-      obj[template.query.x] = tcrsClickLoc.x.toFixed();
-      obj[template.query.y] = tcrsClickLoc.y.toFixed();
-      obj[template.query.easting] =  tcrs2pcrs(map.getPixelOrigin().add(e.layerPoint)).x;
-      obj[template.query.northing] = tcrs2pcrs(map.getPixelOrigin().add(e.layerPoint)).y;
-      obj[template.query.zoom] = zoom;
-      obj[template.query.width] = map.getSize().x;
-      obj[template.query.height] = map.getSize().y;
-      obj[template.query.mapbottom] = tcrs2pcrs(bounds.max).y;
-      obj[template.query.mapleft] = tcrs2pcrs(bounds.min).x;
-      obj[template.query.maptop] = tcrs2pcrs(bounds.min).y;
-      obj[template.query.mapright] = tcrs2pcrs(bounds.max).x;
-      
-      obj[template.query.tilebottom] = tcrs2pcrs(tileBounds.max).y;
-      obj[template.query.tileleft] = tcrs2pcrs(tileBounds.min).x;
-      obj[template.query.tiletop] = tcrs2pcrs(tileBounds.min).y;
-      obj[template.query.tileright] = tcrs2pcrs(tileBounds.max).x;
-      // add hidden or other variables that may be present into the values to
-      // be processed by L.Util.template below.
-      for (var v in template.query) {
-          if (["mapi","mapj","tilei","tilej","row","col","x","y","easting","northing","width","height","zoom","mapleft","mapright",",maptop","mapbottom","tileleft","tileright","tiletop","tilebottom"].indexOf(v) < 0) {
-              obj[v] = template.query[v];
-          }
-      }
-      popup.setContent('<a target="_blank" href="'+L.Util.template(template.template, obj)+'">'+template.query.title+'</a>');
-//      fetch(L.Util.template(template.template, obj),{redirect: 'follow'}).then(
-//          function(response) {
-//            if (response.status !== 200) {
-//              console.log('Looks like there was a problem. Status Code: ' +
-//                response.status);
-//            }
-//
-//             //Examine the text in the response
-//            return response.text();
-//          }
-//        ).then(function(data) {
-//              popup.setContent(data);
-//        }).catch(function(err) {
-//          console.log('Fetch Error :-S', err);
-//        });
-      
-      popup.setLatLng(e.latlng).openOn(map);
-    }
   },
 //  setZIndex: function (zIndex) {
 //      this.options.zIndex = zIndex;
@@ -2264,7 +2353,6 @@ M.TemplatedLayer = L.Layer.extend({
         map.removeLayer(this._templates[i].layer);
       }
     }
-    map.off('click', null, this);
   }
 });
 M.templatedLayer = function(templates, options) {
@@ -2857,7 +2945,7 @@ M.MapMLFeatures = L.FeatureGroup.extend({
 L.extend(M.MapMLFeatures, {
 	 geometryToLayer: function (mapml, pointToLayer, coordsToLatLng, vectorOptions) {
     var geometry = mapml.tagName.toUpperCase() === 'FEATURE' ? mapml.getElementsByTagName('geometry')[0] : mapml,
-        latlng, latlngs, coordinates;
+        latlng, latlngs, coordinates, member, members, linestrings;
 
     coordsToLatLng = coordsToLatLng || this.coordsToLatLng;
 
@@ -2887,16 +2975,21 @@ L.extend(M.MapMLFeatures, {
         latlngs = this.coordsToLatLngs(coordinates, 0, coordsToLatLng);
         return new L.Polyline(latlngs, vectorOptions);
       case 'MULTILINESTRING':
-        console.log('MULTILINESTRING Not implemented yet');
-        break;
+        members = geometry.getElementsByTagName('coordinates');
+        linestrings = new Array(members.length);
+        for (member=0;member<members.length;member++) {
+          linestrings[member] = coordinatesToArray(members[member]);
+        }
+        latlngs = this.coordsToLatLngs(linestrings, 2, coordsToLatLng);
+        return new L.Polyline(latlngs, vectorOptions);
       case 'POLYGON':
         var rings = geometry.getElementsByTagName('coordinates');
         latlngs = this.coordsToLatLngs(coordinatesToArray(rings), 1, coordsToLatLng);
         return new L.Polygon(latlngs, vectorOptions);
       case 'MULTIPOLYGON':
-        var members = geometry.getElementsByTagName('polygon'),
-            polygons = new Array(members.length);
-        for (var member=0;member<members.length;member++) {
+        members = geometry.getElementsByTagName('polygon');
+        var polygons = new Array(members.length);
+        for (member=0;member<members.length;member++) {
           polygons[member] = coordinatesToArray(members[member].querySelectorAll('coordinates'));
         }
         latlngs = this.coordsToLatLngs(polygons, 2, coordsToLatLng);
@@ -2922,7 +3015,7 @@ L.extend(M.MapMLFeatures, {
       var a = new Array(coordinates.length);
       for (var i=0;i<a.length;i++) {
         a[i]=[];
-        coordinates[i].textContent.match(/(\S+\s+\S+)/gim).forEach(splitCoordinate, a[i]);
+        (coordinates[i] || coordinates).textContent.match(/(\S+\s+\S+)/gim).forEach(splitCoordinate, a[i]);
       }
       return a;
     }
