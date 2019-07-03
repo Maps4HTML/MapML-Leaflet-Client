@@ -1,0 +1,19 @@
+<mapml>
+  <head>
+    <title>Multipoint test</title>
+    <meta http-equiv="Content-Type" content="text/mapml"/>
+    <meta charset="utf-8"/>
+    <meta name="projection" content="WGS84"/>
+    <meta name="zoom" content="min=0,max=17"/>
+    <link rel="license" href="https://www.nrcan.gc.ca/earth-sciences/geography/topographic-information/free-data-geogratis/licence/17285" title="Canada Base Map © Natural Resources Canada"/>
+  </head>
+  <body>
+    <feature>
+      <geometry>
+        <multipoint>
+          <coordinates>-75.705338 45.397785 -75.702082 45.397847</coordinates>
+        </multipoint>
+      </geometry>
+    </feature>
+  </body>
+</mapml>
