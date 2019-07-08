@@ -1,0 +1,16 @@
+<mapml>
+  <head>
+    <title>WGS84 Testing in MapML</title>
+    <meta http-equiv="Content-Type" content="text/mapml"/>
+    <meta charset="utf-8"/>
+    <link rel="license" href="https://www.nrcan.gc.ca/earth-sciences/geography/topographic-information/free-data-geogratis/licence/17285" title="Canada Base Map © Natural Resources Canada"/>
+  </head>
+  <body>
+    <extent units="WGS84">
+      <input name="z" type="zoom" value="0" min="0" max="15"/>
+      <input name="x" type="location" units="tilematrix" axis="column"/>
+      <input name="y" type="location" units="tilematrix" axis="row"/>
+      <link rel="tile" tref="http://localhost:8080/geoserver/gwc/service/wmts?layer=nurc%3AImg_Sample&amp;style=&amp;tilematrixset=EPSG%3A4326&amp;Service=WMTS&amp;Request=GetTile&amp;Version=1.0.0&amp;Format=image%2Fpng&amp;TileMatrix=EPSG%3A4326%3A{z}&amp;TileCol={x}&amp;TileRow={y}"/>
+    </extent>
+  </body>
+</mapml>
