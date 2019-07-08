@@ -600,9 +600,11 @@ M.MapMLLayer = L.Layer.extend({
               _leafletLayer: this,
               onEachFeature: function(properties, geometry) {
                 // need to parse as HTML to preserve semantics and styles
-                var c = document.createElement('div');
-                c.insertAdjacentHTML('afterbegin', properties.innerHTML);
-                geometry.bindPopup(c, {autoPan:false});
+                if (properties) {
+                  var c = document.createElement('div');
+                  c.insertAdjacentHTML('afterbegin', properties.innerHTML);
+                  geometry.bindPopup(c, {autoPan:false});
+                }
               }
             });
         }
@@ -1648,7 +1650,6 @@ M.MapMLLayer = L.Layer.extend({
           return this._templatedLayer._queries;
         }
     }
-    
 });
 M.mapMLLayer = function (url, node, options) {
 	return new M.MapMLLayer(url, node ? node : document.createElement('div'), options);
@@ -2948,27 +2949,34 @@ L.extend(M.MapMLFeatures, {
         latlng, latlngs, coordinates, member, members, linestrings;
 
     coordsToLatLng = coordsToLatLng || this.coordsToLatLng;
+    var pointOptions = {  opacity: vectorOptions.opacity ? vectorOptions.opacity : null,
+                          icon: L.icon(
+                            { iconUrl: vectorOptions.imagePath+"marker-icon.png",
+                              iconRetinaUrl: vectorOptions.imagePath+"marker-icon-2x.png",
+                              shadowUrl: vectorOptions.imagePath+"marker-shadow.png",
+                              iconSize: [25, 41],
+                              iconAnchor: [12, 41],
+                              popupAnchor: [1, -34],
+                              shadowSize: [41, 41]
+                            })};
 
     switch (geometry.firstElementChild.tagName.toUpperCase()) {
       case 'POINT':
         coordinates = [];
         geometry.getElementsByTagName('coordinates')[0].textContent.split(/\s+/gim).forEach(parseNumber,coordinates);
         latlng = coordsToLatLng(coordinates);
-
-        var opacity = vectorOptions.opacity ? vectorOptions.opacity : null;
         return pointToLayer ? pointToLayer(mapml, latlng) : 
-                                    new L.Marker(latlng, {opacity: opacity, icon: L.icon({
-                                        iconUrl: vectorOptions.imagePath+"marker-icon.png",
-                                        iconRetinaUrl: vectorOptions.imagePath+"marker-icon-2x.png",
-                                        shadowUrl: vectorOptions.imagePath+"marker-shadow.png",
-                                        iconSize: [25, 41],
-                                        iconAnchor: [12, 41],
-                                        popupAnchor: [1, -34],
-                                        shadowSize: [41, 41]})});
+                                    new L.Marker(latlng, pointOptions);
 
       case 'MULTIPOINT':
-        console.log('MULTIPOINT Not implemented yet');
-        break;
+        coordinates = [];
+        geometry.getElementsByTagName('coordinates')[0].textContent.match(/(\S+ \S+)/gim).forEach(splitCoordinate, coordinates);
+        latlngs = this.coordsToLatLngs(coordinates, 0, coordsToLatLng);
+        var points = new Array(latlngs.length);
+        for(member=0;member<points.length;member++) {
+          points[member] = new L.Marker(latlngs[member],pointOptions);
+        }
+        return new L.featureGroup(points);
       case 'LINESTRING':
         coordinates = [];
         geometry.getElementsByTagName('coordinates')[0].textContent.match(/(\S+ \S+)/gim).forEach(splitCoordinate, coordinates);
