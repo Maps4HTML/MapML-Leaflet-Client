@@ -1842,8 +1842,8 @@ M.TemplatedImageLayer =  L.Layer.extend({
               extentVarNames.extent.width = name;
         } else if ( type === "height") {
               extentVarNames.extent.height = name;
-        } else if (type === "location" && units === "pcrs") {
-          //<input name="..." units="pcrs" type="location" position="top|bottom-left|right" axis="northing|easting"/>
+        } else if (type === "location" && (units === "pcrs" || units ==="gcrs") ) {
+          //<input name="..." units="pcrs" type="location" position="top|bottom-left|right" axis="northing|easting|latitude|longitude"/>
           switch (axis) {
             case ('easting'):
               if (position) {
@@ -1855,6 +1855,24 @@ M.TemplatedImageLayer =  L.Layer.extend({
               }
               break;
             case ('northing'):
+              if (position) {
+                if (position.match(/top-.*?/i)) {
+                  extentVarNames.extent.top = name;
+                } else if (position.match(/bottom-.*?/i)) {
+                  extentVarNames.extent.bottom = name;
+                }
+              }
+              break;
+            case ('longitude'):
+              if (position) {
+                  if (position.match(/.*?-left/i)) {
+                    extentVarNames.extent.left = name;
+                  } else if (position.match(/.*?-right/i)) {
+                    extentVarNames.extent.right = name;
+                  }
+              }
+              break;
+            case ('latitude'):
               if (position) {
                 if (position.match(/top-.*?/i)) {
                   extentVarNames.extent.top = name;
@@ -2218,8 +2236,8 @@ M.TemplatedLayer = L.Layer.extend({
             default:
               // unsuportted axis value
           }
-        } else if (type === "location" && units === "pcrs") {
-          //<input name="..." units="pcrs" type="location" position="top|bottom-left|right" axis="northing|easting"/>
+        } else if (type === "location" && (units === "pcrs" || units === "gcrs")) {
+          //<input name="..." units="pcrs" type="location" position="top|bottom-left|right" axis="northing|easting|latitude|longitude"/>
           switch (axis) {
             case ('easting'):
               if (position) {
@@ -2241,6 +2259,24 @@ M.TemplatedLayer = L.Layer.extend({
                 }
               } else {
                 queryVarNames.query.northing = name;
+              }
+              break;
+            case ('longitude'):
+              if (position) {
+                  if (position.match(/.*?-left/i)) {
+                    queryVarNames.query.mapleft = name;
+                  } else if (position.match(/.*?-right/i)) {
+                    queryVarNames.query.mapright = name;
+                  }
+              }
+              break;
+            case ('latitude'):
+              if (position) {
+                if (position.match(/top-.*?/i)) {
+                  queryVarNames.query.maptop = name;
+                } else if (position.match(/bottom-.*?/i)) {
+                  queryVarNames.query.mapbottom = name;
+                }
               }
               break;
           }
