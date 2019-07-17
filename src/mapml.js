@@ -412,6 +412,12 @@ M.QueryHandler = L.Handler.extend({
       obj[template.query.mapi] = e.containerPoint.x.toFixed();
       obj[template.query.mapj] = e.containerPoint.y.toFixed();
       
+      // Currently only supporting gcrs axis values.  Could do pcrs I suppose.
+      obj[template.query.pixelleft] = map.containerPointToLatLng(e.containerPoint).lng;
+      obj[template.query.pixeltop] = map.containerPointToLatLng(e.containerPoint).lat;
+      obj[template.query.pixelright] = map.containerPointToLatLng(e.containerPoint.add([1,1])).lng;
+      obj[template.query.pixelbottom] = map.containerPointToLatLng(e.containerPoint.add([1,1])).lat;
+      
       obj[template.query.col] = tileMatrixClickLoc.x;
       obj[template.query.row] = tileMatrixClickLoc.y;
 
@@ -437,7 +443,7 @@ M.QueryHandler = L.Handler.extend({
       // add hidden or other variables that may be present into the values to
       // be processed by L.Util.template below.
       for (var v in template.query) {
-          if (["mapi","mapj","tilei","tilej","row","col","x","y","easting","northing","width","height","zoom","mapleft","mapright",",maptop","mapbottom","tileleft","tileright","tiletop","tilebottom"].indexOf(v) < 0) {
+          if (["mapi","mapj","tilei","tilej","row","col","x","y","easting","northing","width","height","zoom","mapleft","mapright",",maptop","mapbottom","tileleft","tileright","tiletop","tilebottom","pixeltop","pixelbottom","pixelleft","pixelright"].indexOf(v) < 0) {
               obj[v] = template.query[v];
           }
       }
@@ -451,7 +457,7 @@ M.QueryHandler = L.Handler.extend({
             }
           }).then(function(response) {
             var contenttype = response.headers.get("Content-Type");
-            if ( contenttype === "text/mapml") {
+            if ( contenttype.startsWith("text/mapml")) {
               return handleMapMLResponse(response, e.latlng);
             } else {
               return handleOtherResponse(response, layer, e.latlng);
@@ -2280,20 +2286,42 @@ M.TemplatedLayer = L.Layer.extend({
               }
               break;
           }
-        } else if (type === "location" && units === "map" || units === "tile") {
-          // <input name="..." type="location" units="map" axis="i|j"/>
-          if (axis === "i") {
-            if (units === "tile") {
-              queryVarNames.query.tilei = name;
-            } else {
-              queryVarNames.query.mapi = name;
-            }
-          } else if (axis === "j") {
-            if (units === "tile") {
-              queryVarNames.query.tilej = name;
-            } else {
-              queryVarNames.query.mapj = name;
-            }
+        } else if (type === "location" && (units === "map" || units === "tile")) {
+          // <input name="..." type="location" units="map" axis="i|j|latitude|longitude"/>
+          switch (axis) {
+            case('i'):
+              if (units === "tile") {
+                queryVarNames.query.tilei = name;
+              } else {
+                queryVarNames.query.mapi = name;
+              }
+              break;
+            case('j'):
+              if (units === "tile") {
+                queryVarNames.query.tilej = name;
+              } else {
+                queryVarNames.query.mapj = name;
+              }
+              break;
+            case('longitude'):
+              if (position) {
+                  if (position.match(/.*?-left/i)) {
+                    queryVarNames.query.pixelleft = name;
+                  } else if (position.match(/.*?-right/i)) {
+                    queryVarNames.query.pixelright = name;
+                  }
+              }
+              break;
+            case('latitude'):
+              if (position) {
+                if (position.match(/top-.*?/i)) {
+                  queryVarNames.query.pixeltop = name;
+                } else if (position.match(/bottom-.*?/i)) {
+                  queryVarNames.query.pixelbottom = name;
+                }
+              }
+              break;
+            // could add easting and northing if necessary I think
           }
         } else if (type === "location" && units === "tcrs") {
           if (axis === "x") {
