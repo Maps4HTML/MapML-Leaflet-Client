@@ -412,13 +412,12 @@ M.QueryHandler = L.Handler.extend({
       obj[template.query.mapi] = e.containerPoint.x.toFixed();
       obj[template.query.mapj] = e.containerPoint.y.toFixed();
       
-      // Currently only supporting gcrs axis values.  Could do pcrs I suppose.
       obj[template.query.pixelleft] = map.containerPointToLatLng(e.containerPoint).lng;
       obj[template.query.pixeltop] = map.containerPointToLatLng(e.containerPoint).lat;
       obj[template.query.pixelright] = map.containerPointToLatLng(e.containerPoint.add([1,1])).lng;
       obj[template.query.pixelbottom] = map.containerPointToLatLng(e.containerPoint.add([1,1])).lat;
       
-      obj[template.query.col] = tileMatrixClickLoc.x;
+      obj[template.query.column] = tileMatrixClickLoc.x;
       obj[template.query.row] = tileMatrixClickLoc.y;
 
       // whereas the layerPoint is calculated relative to the origin plus / minus any
@@ -1851,6 +1850,7 @@ M.TemplatedImageLayer =  L.Layer.extend({
         } else if (type === "location" && (units === "pcrs" || units ==="gcrs") ) {
           //<input name="..." units="pcrs" type="location" position="top|bottom-left|right" axis="northing|easting|latitude|longitude"/>
           switch (axis) {
+            case ('longitude'):
             case ('easting'):
               if (position) {
                   if (position.match(/.*?-left/i)) {
@@ -1860,25 +1860,8 @@ M.TemplatedImageLayer =  L.Layer.extend({
                   }
               }
               break;
-            case ('northing'):
-              if (position) {
-                if (position.match(/top-.*?/i)) {
-                  extentVarNames.extent.top = name;
-                } else if (position.match(/bottom-.*?/i)) {
-                  extentVarNames.extent.bottom = name;
-                }
-              }
-              break;
-            case ('longitude'):
-              if (position) {
-                  if (position.match(/.*?-left/i)) {
-                    extentVarNames.extent.left = name;
-                  } else if (position.match(/.*?-right/i)) {
-                    extentVarNames.extent.right = name;
-                  }
-              }
-              break;
             case ('latitude'):
+            case ('northing'):
               if (position) {
                 if (position.match(/top-.*?/i)) {
                   extentVarNames.extent.top = name;
@@ -2070,6 +2053,8 @@ M.TemplatedFeaturesLayer =  L.Layer.extend({
         } else if (type === "location" && (units === "pcrs" || units ==="gcrs" || units === "tcrs")) {
           //<input name="..." units="pcrs" type="location" position="top|bottom-left|right" axis="northing|easting"/>
           switch (axis) {
+            case ('x'):
+            case ('longitude'):
             case ('easting'):
               if (position) {
                   if (position.match(/.*?-left/i)) {
@@ -2079,43 +2064,9 @@ M.TemplatedFeaturesLayer =  L.Layer.extend({
                   }
               }
               break;
-            case ('northing'):
-              if (position) {
-                if (position.match(/top-.*?/i)) {
-                  featuresVarNames.feature.top = { name: name, axis: axis};
-                } else if (position.match(/bottom-.*?/i)) {
-                  featuresVarNames.feature.bottom = { name: name, axis: axis};
-                }
-              }
-              break;
-            case ('x'):
-              if (position) {
-                  if (position.match(/.*?-left/i)) {
-                    featuresVarNames.feature.left = { name: name, axis: axis};
-                  } else if (position.match(/.*?-right/i)) {
-                    featuresVarNames.feature.right = { name: name, axis: axis};
-                  }
-              }
-              break;
             case ('y'):
-              if (position) {
-                if (position.match(/top-.*?/i)) {
-                  featuresVarNames.feature.top = { name: name, axis: axis};
-                } else if (position.match(/bottom-.*?/i)) {
-                  featuresVarNames.feature.bottom = { name: name, axis: axis};
-                }
-              }
-              break;
-            case ('longitude'):
-              if (position) {
-                  if (position.match(/.*?-left/i)) {
-                    featuresVarNames.feature.left = { name: name, axis: axis};
-                  } else if (position.match(/.*?-right/i)) {
-                    featuresVarNames.feature.right = { name: name, axis: axis};
-                  }
-              }
-              break;
             case ('latitude'):
+            case ('northing'):
               if (position) {
                 if (position.match(/top-.*?/i)) {
                   featuresVarNames.feature.top = { name: name, axis: axis};
@@ -2216,15 +2167,15 @@ M.TemplatedLayer = L.Layer.extend({
               queryVarNames.query.height = name;
         } else if (type === "location") { 
           switch (axis) {
+            case('x'):
+            case('y'):
             case("column"): 
-              queryVarNames.query.col = name;
-              break;
             case("row"):
-              queryVarNames.query.row = name;
+              queryVarNames.query[axis] = name;
               break;
+            case ('longitude'):
             case ('easting'):
               if (position) {
-                  /* FROM HERE */
                   if (position.match(/.*?-left/i)) {
                     if (rel === "pixel") {
                       queryVarNames.query.pixelleft = name;
@@ -2242,11 +2193,11 @@ M.TemplatedLayer = L.Layer.extend({
                       queryVarNames.query.mapright = name;
                     }
                   }
-                  /* TO HERE SHOULD BE A FUNCTION */
               } else {
-                  queryVarNames.query.easting = name;
+                  queryVarNames.query[axis] = name;
               }
               break;
+            case ('latitude'):
             case ('northing'):
               if (position) {
                   if (position.match(/top-.*?/i)) {
@@ -2267,53 +2218,7 @@ M.TemplatedLayer = L.Layer.extend({
                     }
                   }
               } else {
-                queryVarNames.query.northing = name;
-              }
-              break;
-            case ('longitude'):
-              if (position) {
-                  if (position.match(/.*?-left/i)) {
-                    if (rel === "pixel") {
-                      queryVarNames.query.pixelleft = name;
-                    } else if (rel === "tile") {
-                      queryVarNames.query.tileleft = name;
-                    } else {
-                      queryVarNames.query.mapleft = name;
-                    }
-                  } else if (position.match(/.*?-right/i)) {
-                    if (rel === "pixel") {
-                      queryVarNames.query.pixelright = name;
-                    } else if (rel === "tile") {
-                      queryVarNames.query.tileright = name;
-                    } else {
-                      queryVarNames.query.mapright = name;
-                    }
-                  }
-              } else {
-                queryVarNames.query.longitude = name;
-              }
-              break;
-            case ('latitude'):
-              if (position) {
-                if (position.match(/top-.*?/i)) {
-                    if (rel === "pixel") {
-                      queryVarNames.query.pixeltop = name;
-                    } else if (rel === "tile") {
-                      queryVarNames.query.tiletop = name;
-                    } else {
-                      queryVarNames.query.maptop = name;
-                    }
-                } else if (position.match(/bottom-.*?/i)) {
-                    if (rel === "pixel") {
-                      queryVarNames.query.pixelbottom = name;
-                    } else if (rel === "tile") {
-                      queryVarNames.query.tilebottom = name;
-                    } else {
-                      queryVarNames.query.mapbottom = name;
-                    }
-                }
-              } else {
-                queryVarNames.query.latitude = name;
+                queryVarNames.query[axis] = name;
               }
               break;
             case('i'):
@@ -2330,10 +2235,6 @@ M.TemplatedLayer = L.Layer.extend({
                 queryVarNames.query.mapj = name;
               }
               break;
-            case('x'):
-              queryVarNames.query.x = name;
-            case('y'):
-              queryVarNames.query.y = name;
             default:
               // unsuportted axis value
           }
@@ -2568,6 +2469,7 @@ M.TemplatedTileLayer = L.TileLayer.extend({
             case("row"):
               tileVarNames.tile.row = name;
               break;
+            case('longitude'):
             case("easting"):
               if (position) {
                 if (position.match(/.*?-left/i)) {
@@ -2577,6 +2479,7 @@ M.TemplatedTileLayer = L.TileLayer.extend({
                 }
               } 
               break;
+            case('latitude'):
             case("northing"):
               if (position) {
                 if (position.match(/top-.*?/i)) {
