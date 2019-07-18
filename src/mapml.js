@@ -2214,9 +2214,9 @@ M.TemplatedLayer = L.Layer.extend({
               queryVarNames.query.width = name;
         } else if ( type === "height") {
               queryVarNames.query.height = name;
-        } else if (type === "location" && units === "tilematrix") {
+        } else if (type === "location") { 
           switch (axis) {
-            case("column"):
+            case("column"): 
               queryVarNames.query.col = name;
               break;
             case("row"):
@@ -2224,46 +2224,48 @@ M.TemplatedLayer = L.Layer.extend({
               break;
             case ('easting'):
               if (position) {
+                  /* FROM HERE */
                   if (position.match(/.*?-left/i)) {
-                    queryVarNames.query.tileleft = name;
+                    if (rel === "pixel") {
+                      queryVarNames.query.pixelleft = name;
+                    } else if (rel === "tile") {
+                      queryVarNames.query.tileleft = name;
+                    } else {
+                      queryVarNames.query.mapleft = name;
+                    }
                   } else if (position.match(/.*?-right/i)) {
-                    queryVarNames.query.tileright = name;
+                    if (rel === "pixel") {
+                      queryVarNames.query.pixelright = name;
+                    } else if (rel === "tile") {
+                      queryVarNames.query.tileright = name;
+                    } else {
+                      queryVarNames.query.mapright = name;
+                    }
                   }
-              }
-              break;
-            case ('northing'):
-              if (position) {
-                if (position.match(/top-.*?/i)) {
-                  queryVarNames.query.tiletop = name;
-                } else if (position.match(/bottom-.*?/i)) {
-                  queryVarNames.query.tilebottom = name;
-                }
-              }
-              break;
-            default:
-              // unsuportted axis value
-          }
-        } else if (type === "location" && (units === "pcrs" || units === "gcrs")) {
-          //<input name="..." units="pcrs" type="location" position="top|bottom-left|right" axis="northing|easting|latitude|longitude"/>
-          switch (axis) {
-            case ('easting'):
-              if (position) {
-                  if (position.match(/.*?-left/i)) {
-                    queryVarNames.query.mapleft = name;
-                  } else if (position.match(/.*?-right/i)) {
-                    queryVarNames.query.mapright = name;
-                  }
+                  /* TO HERE SHOULD BE A FUNCTION */
               } else {
                   queryVarNames.query.easting = name;
               }
               break;
             case ('northing'):
               if (position) {
-                if (position.match(/top-.*?/i)) {
-                  queryVarNames.query.maptop = name;
-                } else if (position.match(/bottom-.*?/i)) {
-                  queryVarNames.query.mapbottom = name;
-                }
+                  if (position.match(/top-.*?/i)) {
+                    if (rel === "pixel") {
+                      queryVarNames.query.pixeltop = name;
+                    } else if (rel === "tile") {
+                      queryVarNames.query.tiletop = name;
+                    } else {
+                      queryVarNames.query.maptop = name;
+                    }
+                  } else if (position.match(/bottom-.*?/i)) {
+                    if (rel === "pixel") {
+                      queryVarNames.query.pixelbottom = name;
+                    } else if (rel === "tile") {
+                      queryVarNames.query.tilebottom = name;
+                    } else {
+                      queryVarNames.query.mapbottom = name;
+                    }
+                  }
               } else {
                 queryVarNames.query.northing = name;
               }
@@ -2273,12 +2275,16 @@ M.TemplatedLayer = L.Layer.extend({
                   if (position.match(/.*?-left/i)) {
                     if (rel === "pixel") {
                       queryVarNames.query.pixelleft = name;
+                    } else if (rel === "tile") {
+                      queryVarNames.query.tileleft = name;
                     } else {
                       queryVarNames.query.mapleft = name;
                     }
                   } else if (position.match(/.*?-right/i)) {
                     if (rel === "pixel") {
                       queryVarNames.query.pixelright = name;
+                    } else if (rel === "tile") {
+                      queryVarNames.query.tileright = name;
                     } else {
                       queryVarNames.query.mapright = name;
                     }
@@ -2292,12 +2298,16 @@ M.TemplatedLayer = L.Layer.extend({
                 if (position.match(/top-.*?/i)) {
                     if (rel === "pixel") {
                       queryVarNames.query.pixeltop = name;
+                    } else if (rel === "tile") {
+                      queryVarNames.query.tiletop = name;
                     } else {
                       queryVarNames.query.maptop = name;
                     }
                 } else if (position.match(/bottom-.*?/i)) {
                     if (rel === "pixel") {
                       queryVarNames.query.pixelbottom = name;
+                    } else if (rel === "tile") {
+                      queryVarNames.query.tilebottom = name;
                     } else {
                       queryVarNames.query.mapbottom = name;
                     }
@@ -2306,10 +2316,6 @@ M.TemplatedLayer = L.Layer.extend({
                 queryVarNames.query.latitude = name;
               }
               break;
-          }
-        } else if (type === "location" && (units === "map" || units === "tile")) {
-          // <input name="..." type="location" units="map" axis="i|j|latitude|longitude"/>
-          switch (axis) {
             case('i'):
               if (units === "tile") {
                 queryVarNames.query.tilei = name;
@@ -2324,12 +2330,12 @@ M.TemplatedLayer = L.Layer.extend({
                 queryVarNames.query.mapj = name;
               }
               break;
-          }
-        } else if (type === "location" && units === "tcrs") {
-          if (axis === "x") {
-            queryVarNames.query.x = name;
-          } else if (axis === "y") {
-            queryVarNames.query.y = name;
+            case('x'):
+              queryVarNames.query.x = name;
+            case('y'):
+              queryVarNames.query.y = name;
+            default:
+              // unsuportted axis value
           }
         } else if (type === "zoom") {
           //<input name="..." type="zoom" value="0" min="0" max="17"/>
