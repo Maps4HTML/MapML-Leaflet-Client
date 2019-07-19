@@ -392,7 +392,6 @@ M.QueryHandler = L.Handler.extend({
     _query(e, layer) {
       var obj = {},
           template = layer.getQueryTemplates()[0],
-          bounds = e.target.getPixelBounds(),
           zoom = e.target.getZoom(),
           map = this._map,
           crs = layer.crs,
@@ -401,39 +400,41 @@ M.QueryHandler = L.Handler.extend({
           tcrs2pcrs = function (c) {
             return crs.transformation.untransform(c,crs.scale(zoom));
           };
-          
-      var tcrsClickLoc = map.getPixelOrigin().add(e.layerPoint),
+      var tcrsClickLoc = crs.latLngToPoint(e.latlng, zoom),
           tileMatrixClickLoc = tcrsClickLoc.divideBy(256).floor(),
           tileBounds = new L.Bounds(tcrsClickLoc.divideBy(256).floor().multiplyBy(256), tcrsClickLoc.divideBy(256).ceil().multiplyBy(256));
   
       // all of the following are locations that might be used in a query, I think.
       obj[template.query.tilei] = tcrsClickLoc.x.toFixed() - (tileMatrixClickLoc.x * 256);
       obj[template.query.tilej] = tcrsClickLoc.y.toFixed() - (tileMatrixClickLoc.y * 256);
-      obj[template.query.mapi] = e.containerPoint.x.toFixed();
-      obj[template.query.mapj] = e.containerPoint.y.toFixed();
       
-      obj[template.query.pixelleft] = map.containerPointToLatLng(e.containerPoint).lng;
-      obj[template.query.pixeltop] = map.containerPointToLatLng(e.containerPoint).lat;
-      obj[template.query.pixelright] = map.containerPointToLatLng(e.containerPoint.add([1,1])).lng;
-      obj[template.query.pixelbottom] = map.containerPointToLatLng(e.containerPoint.add([1,1])).lat;
+      // this forces the click to the centre of the map extent in the layer crs
+      obj[template.query.mapi] = (map.getSize().divideBy(2)).x.toFixed();
+      obj[template.query.mapj] = (map.getSize().divideBy(2)).y.toFixed();
+      
+      obj[template.query.pixelleft] = crs.pointToLatLng(tcrsClickLoc, zoom).lng;
+      obj[template.query.pixeltop] = crs.pointToLatLng(tcrsClickLoc, zoom).lat;
+      obj[template.query.pixelright] = crs.pointToLatLng(tcrsClickLoc.add([1,1]), zoom).lng;
+      obj[template.query.pixelbottom] = crs.pointToLatLng(tcrsClickLoc.add([1,1]), zoom).lat;
       
       obj[template.query.column] = tileMatrixClickLoc.x;
       obj[template.query.row] = tileMatrixClickLoc.y;
-
+      obj[template.query.x] = tcrsClickLoc.x.toFixed();
+      obj[template.query.y] = tcrsClickLoc.y.toFixed();
+      
       // whereas the layerPoint is calculated relative to the origin plus / minus any
       // pan movements so is equal to containerPoint at first before any pans, but
       // changes as the map pans. 
-      obj[template.query.x] = tcrsClickLoc.x.toFixed();
-      obj[template.query.y] = tcrsClickLoc.y.toFixed();
-      obj[template.query.easting] =  tcrs2pcrs(map.getPixelOrigin().add(e.layerPoint)).x;
-      obj[template.query.northing] = tcrs2pcrs(map.getPixelOrigin().add(e.layerPoint)).y;
+      obj[template.query.easting] =  tcrs2pcrs(tcrsClickLoc).x;
+      obj[template.query.northing] = tcrs2pcrs(tcrsClickLoc).y;
       obj[template.query.zoom] = zoom;
       obj[template.query.width] = map.getSize().x;
       obj[template.query.height] = map.getSize().y;
-      obj[template.query.mapbottom] = tcrs2pcrs(bounds.max).y;
-      obj[template.query.mapleft] = tcrs2pcrs(bounds.min).x;
-      obj[template.query.maptop] = tcrs2pcrs(bounds.min).y;
-      obj[template.query.mapright] = tcrs2pcrs(bounds.max).x;
+      // assumes the click is at the centre of the map, per template.query.mapi, mapj above
+      obj[template.query.mapbottom] = tcrs2pcrs(tcrsClickLoc.add(map.getSize().divideBy(2))).y;
+      obj[template.query.mapleft] = tcrs2pcrs(tcrsClickLoc.subtract(map.getSize().divideBy(2))).x;
+      obj[template.query.maptop] = tcrs2pcrs(tcrsClickLoc.subtract(map.getSize().divideBy(2))).y;
+      obj[template.query.mapright] = tcrs2pcrs(tcrsClickLoc.add(map.getSize().divideBy(2))).x;
       
       obj[template.query.tilebottom] = tcrs2pcrs(tileBounds.max).y;
       obj[template.query.tileleft] = tcrs2pcrs(tileBounds.min).x;
