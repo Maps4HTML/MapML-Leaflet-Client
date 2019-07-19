@@ -1010,8 +1010,8 @@ M.MapMLLayer = L.Layer.extend({
             if (this.readyState === this.DONE && mapml) {
                 var serverExtent = mapml.querySelector('extent'),
                     projectionMatch = serverExtent && serverExtent.hasAttribute('units') && 
-                    serverExtent.getAttribute('units').toUpperCase() === layer.options.projection,
-                    selectedAlternate = !projectionMatch && mapml.querySelector('head link[rel=alternate][projection='+layer.options.projection+']'),
+                    serverExtent.getAttribute('units').toUpperCase() === layer.options.mapprojection,
+                    selectedAlternate = !projectionMatch && mapml.querySelector('head link[rel=alternate][projection='+layer.options.mapprojection+']'),
                     base = (new URI(mapml.querySelector('base') ? mapml.querySelector('base').getAttribute('href') : null || this.responseURL)).resolve(new URI(this.responseURL));
                 
                 if (!serverExtent) {
@@ -1192,7 +1192,7 @@ M.MapMLLayer = L.Layer.extend({
               layer.error = true;
             };
             xhr.open("GET", url);
-            xhr.setRequestHeader("Accept",M.mime+";projection="+layer.options.projection+";zoom="+layer.zoom);
+            xhr.setRequestHeader("Accept",M.mime+";projection="+layer.options.mapprojection+";zoom="+layer.zoom);
             xhr.overrideMimeType("text/xml");
             xhr.send();
         }
