@@ -395,7 +395,7 @@ M.QueryHandler = L.Handler.extend({
           bounds = e.target.getPixelBounds(),
           zoom = e.target.getZoom(),
           map = this._map,
-          crs = map.options.crs,
+          crs = layer.crs,
           container = layer._container,
           popupOptions = {autoPan: true, maxHeight: (map.getSize().y * 0.5) - 50},
           tcrs2pcrs = function (c) {
@@ -466,7 +466,8 @@ M.QueryHandler = L.Handler.extend({
           });
       function handleMapMLResponse(response, loc) {
           return response.text().then(mapml => {
-              var _unproject = L.bind(map.options.crs.unproject, map.options.crs);
+              // bind the deprojection function of the layer's crs 
+              var _unproject = L.bind(crs.unproject, crs);
               function _coordsToLatLng(coords) {
                   return _unproject(L.point(coords));
               }
@@ -1409,6 +1410,12 @@ M.MapMLLayer = L.Layer.extend({
             var zoom = serverExtent.querySelector('[type=zoom]');
             zoom.setAttribute('min',this._map.getMinZoom());
             zoom.setAttribute('max',this._map.getMaxZoom());
+        }
+        var lp = serverExtent.hasAttribute("units") ? serverExtent.getAttribute("units") : null;
+        if (lp && lp === "OSMTILE" || lp === "WGS84" || lp === "APSTILE" || lp === "CBMTILE") {
+          this.crs = M[lp];
+        } else {
+          this.crs = M.OSMTILE;
         }
     },
     _getMapMLExtent: function (bounds, zooms, proj) {
