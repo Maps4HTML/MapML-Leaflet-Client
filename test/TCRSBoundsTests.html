@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>TODO supply a title</title>
+    <meta charset="UTF-8">
+     <script src="../bower_components/webcomponentsjs/webcomponents-lite.min.js"></script>
+     <link rel="import" href="../bower_components/web-map/web-map.html">
+     <script>
+     </script>
+  </head>
+  <body>
+<!--    <map id="theapstilemap" is="web-map" zoom="5" lat="90" lon="0" width="700" height="400" projection="APSTILE" controls >
+      <layer- id="osm" src="https://geogratis.gc.ca/mapml/en/apstile/arctic/" label="Arctic Base Map" checked ></layer->
+    </map>
+    <map id="theosmtilemap" is="web-map" zoom="5" lat="47" lon="-77" width="700" height="400" projection="OSMTILE" controls >
+      <layer- id="osm" src="https://geogratis.gc.ca/mapml/en/osmtile/osm/" label="Open Street Map" checked ></layer->
+    </map>
+    <map id="cbmtilemap" is="web-map" zoom="5" lat="47" lon="-77" width="700" height="400" projection="CBMTILE" controls >
+      <layer- id="osm" src="https://geogratis.gc.ca/mapml/en/cbmtile/cbmt/" label="Canada Base Map" checked ></layer->
+    </map>-->
+    <map id="thewgs84map" is="web-map" zoom="5" lat="35" lon="-92" width="700" height="400" projection="WGS84" controls >
+      <layer- id="osm" src="http://localhost:8080/geoserver/mapml/topp:states/osmtile/" label="States" checked ></layer->
+    </map>
+    <script>
+      
+//      logit(M.APSTILE,'theapstilemap');
+//      logit(M.OSMTILE,'theosmtilemap');
+//      logit(M.CBMTILE,'cbmtilemap');
+      logit(M.WGS84,'thewgs84map');
+      
+  function logit(crs,mapid) {
+      var gcrs = crs.options.crs.gcrs,
+          tcrs = crs.options.crs.tcrs,
+          pcrs = crs.options.crs.pcrs,
+          map = crs.options.crs.map,
+          tile = crs.options.crs.tile,
+          tilematrix = crs.options.crs.tilematrix;
+  
+      console.log("gcrs horizontal axis name is: "+ gcrs.horizontal.name + "\n"+ "min: "
+              + gcrs.horizontal.min + ", max: "+gcrs.horizontal.max + "\n");
+      console.log("gcrs vertical axis name is: "+ gcrs.vertical.name + "\n"+ "min: "
+              + gcrs.vertical.min+ ", max: "+gcrs.vertical.max + "\n");
+      
+      console.log("pcrs horizontal axis name is: "+ pcrs.horizontal.name + "\n"+ "min: "
+              + pcrs.horizontal.min+ ", max: "+pcrs.horizontal.max + "\n");
+      console.log("pcrs vertical axis name is: "+ pcrs.vertical.name + "\n"+ "min: "
+              + pcrs.vertical.min+ ", max: "+pcrs.vertical.max + "\n");
+
+      console.log("tile horizontal axis name is: "+ tile.horizontal.name + "\n"+ "min: "
+              + tile.horizontal.min+ ", max: "+tile.horizontal.max + "\n");
+      console.log("tile vertical axis name is: "+ tile.vertical.name + "\n"+ "min: "
+              + tile.vertical.min+ ", max: "+tile.vertical.max + "\n");
+
+      console.log("tcrs horizontal axis name is: "+ tcrs.horizontal.name );
+      console.log("tcrs vertical axis name is: "+ tcrs.vertical.name );
+      
+      function printstuff(crs, x,y,z) {
+        return "Zoom: " + z + ";" + " " + x + " min= " +crs.bounds(z).min.x+ " max= " +crs.bounds(z).max.x + "; " 
+                                        + y + " min= " +crs.bounds(z).min.y+ " max= " +crs.bounds(z).max.y; 
+      }
+      for (var i=0;i<crs.options.resolutions.length;i++) {
+        console.log(printstuff(tcrs, tcrs.horizontal.name, tcrs.vertical.name, i));
+      }
+      
+      
+      console.log("tilematrix horizontal axis name is: "+ tilematrix.horizontal.name);
+      console.log("tilematrix vertical axis name is: "+ tilematrix.vertical.name);
+      for (var i=0;i<crs.options.resolutions.length;i++) {
+        console.log(printstuff(tilematrix, tilematrix.horizontal.name, tilematrix.vertical.name, i));
+      }
+      
+    document.querySelector('#'+mapid).addEventListener('load', function () {
+      console.log("map horizontal axis name is: "+ map.horizontal.name + "\n"+ "min: "
+            + map.horizontal.min+ ", max: "+map.horizontal.max(document.querySelector('#'+mapid)._map) + "\n");
+      console.log("map vertical axis name is: "+ map.vertical.name + "\n"+ "min: "
+            + map.vertical.min+ ", max: "+map.vertical.max(document.querySelector('#'+mapid)._map) + "\n");
+    });
+    
+  }
+
+    </script>
+  </body>
+</html>
