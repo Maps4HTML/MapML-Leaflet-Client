@@ -896,14 +896,13 @@ M.MapMLLayer = L.Layer.extend({
         map.addLayer(this._tileLayer);       
         this._tileLayer._container.appendChild(this._mapmlTileContainer);
         // if the extent has been initialized and received, update the map,
-        /* TODO establish the minZoom, maxZoom for the _tileLayer based on
-         * info received from mapml server. */
         if (this._extent) {
             if (this._templateVars) {
               this._templatedLayer = M.templatedLayer(this._templateVars, 
               { pane: this._container,
                 imagePath: M.detectImagePath(this._map.getContainer()),
-                _leafletLayer: this
+                _leafletLayer: this,
+                crs: this.crs
               }).addTo(map);
             }
         } else {
@@ -912,7 +911,8 @@ M.MapMLLayer = L.Layer.extend({
                   this._templatedLayer = M.templatedLayer(this._templateVars, 
                   { pane: this._container,
                     imagePath: M.detectImagePath(this._map.getContainer()),
-                    _leafletLayer: this
+                    _leafletLayer: this,
+                    crs: this.crs
                   }).addTo(map);
                 }
               }, this);
@@ -2615,7 +2615,10 @@ M.TemplatedTileLayer = L.TileLayer.extend({
     // with tiles for which it generates requests on demand (as the user pans/zooms/resizes
     // the map)
     initialize: function(template, options) {
-      L.setOptions(this, L.extend(options,this._setUpTileTemplateVars(template)));
+      // _setUpTileTemplateVars needs options.crs, not available unless we set
+      // options first...
+      L.setOptions(this, options);
+      L.extend(this.options, this._setUpTileTemplateVars(template));
       this._initContainer();
       // call the parent constructor with the template tref value, per the 
       // Leaflet tutorial: http://leafletjs.com/examples/extending/extending-1-classes.html#methods-of-the-parent-class
@@ -2733,7 +2736,8 @@ M.TemplatedTileLayer = L.TileLayer.extend({
       //  bottom: 'bottomvarname'}
 
       var tileVarNames = {tile:{}},
-          inputs = template.values;
+          inputs = template.values,
+          crs = this.options.crs.options;
       
       for (var i=0;i<template.values.length;i++) {
         var type = inputs[i].getAttribute("type"), 
@@ -2742,17 +2746,51 @@ M.TemplatedTileLayer = L.TileLayer.extend({
             name = inputs[i].getAttribute("name"), 
             position = inputs[i].getAttribute("position"),
             shard = (type === "hidden" && inputs[i].hasAttribute("shard")),
-            select = (inputs[i].tagName.toLowerCase() === "select");
+            select = (inputs[i].tagName.toLowerCase() === "select"),
+            value = inputs[i].getAttribute("value"),
+            min = inputs[i].getAttribute("min"),
+            max = inputs[i].getAttribute("max");
         if (type === "location" && units === "tilematrix") {
           switch (axis) {
             case("column"):
               tileVarNames.tile.col = name;
+              var col = { 
+                name: name,
+                min: crs.crs.tilematrix.horizontal.min,
+                max: crs.crs.tilematrix.horizontal.max
+              };
+              if (!isNaN(Number.parseInt(min,10))) {
+                col.min = Number.parseInt(min,10);
+              }
+              if (!isNaN(Number.parseInt(max,10))) {
+                col.max = Number.parseInt(max,10);
+              }
               break;
             case("row"):
               tileVarNames.tile.row = name;
+              var row = { 
+                name: name,
+                min: crs.crs.tilematrix.vertical.min,
+                max: crs.crs.tilematrix.vertical.max
+              };
+              if (!isNaN(Number.parseInt(min,10))) {
+                row.min = Number.parseInt(min,10);
+              }
+              if (!isNaN(Number.parseInt(max,10))) {
+                row.max = Number.parseInt(max,10);
+              }
               break;
             case('longitude'):
-            case("easting"):
+              var long = {
+                min: crs.crs.gcrs.horizontal.min,
+                max: crs.crs.gcrs.horizontal.max
+              };
+              if (!isNaN(Number.parseFloat(min))) {
+                long.min = Number.parseFloat(min);
+              }
+              if (!isNaN(Number.parseFloat(max))) {
+                long.max = Number.parseFloat(max);
+              }
               if (position) {
                 if (position.match(/.*?-left/i)) {
                   tileVarNames.tile.left = name;
@@ -2761,8 +2799,40 @@ M.TemplatedTileLayer = L.TileLayer.extend({
                 }
               } 
               break;
+            case("easting"):
+              var east = {
+                left: '',
+                right: '',
+                min: crs.crs.pcrs.horizontal.min,
+                max: crs.crs.pcrs.horizontal.max
+              };
+              if (!isNaN(Number.parseFloat(min))) {
+                east.min = Number.parseFloat(min);
+              }
+              if (!isNaN(Number.parseFloat(max))) {
+                east.max = Number.parseFloat(max);
+              }
+              if (position) {
+                if (position.match(/.*?-left/i)) {
+                  tileVarNames.tile.left = name;
+                  east.left = name;
+                } else if (position.match(/.*?-right/i)) {
+                  tileVarNames.tile.right = name;
+                  east.right = name;
+                }
+              } 
+              break;
             case('latitude'):
-            case("northing"):
+              var lat = {
+                min: crs.crs.gcrs.vertical.min,
+                max: crs.crs.gcrs.vertical.max
+              };
+              if (!isNaN(Number.parseFloat(min))) {
+                lat.min = Number.parseFloat(min);
+              }
+              if (!isNaN(Number.parseFloat(max))) {
+                lat.max = Number.parseFloat(max);
+              }
               if (position) {
                 if (position.match(/top-.*?/i)) {
                   tileVarNames.tile.top = name;
@@ -2771,12 +2841,57 @@ M.TemplatedTileLayer = L.TileLayer.extend({
                 }
               } 
               break;
+            case("northing"):
+              var north = {
+                bottom: '',
+                top: '',
+                min: crs.crs.pcrs.vertical.min,
+                max: crs.crs.pcrs.vertical.max
+              };
+              if (!isNaN(Number.parseFloat(min))) {
+                north.min = Number.parseFloat(min);
+              }
+              if (!isNaN(Number.parseFloat(max))) {
+                north.max = Number.parseFloat(max);
+              }
+              if (position) {
+                if (position.match(/top-.*?/i)) {
+                  tileVarNames.tile.top = name;
+                  north.top = name;
+                } else if (position.match(/bottom-.*?/i)) {
+                  tileVarNames.tile.bottom = name;
+                  north.bottom = name;
+                }
+              } 
+              break;
             default:
               // unsuportted axis value
           }
-        } else if (type === "zoom") {
+        } else if (type.toLowerCase() === "zoom") {
           //<input name="..." type="zoom" value="0" min="0" max="17"/>
            tileVarNames.tile.zoom = name;
+           var zoom = {
+             name: name,
+             value: '', 
+             min: 0, 
+             max: crs.resolutions.length
+           };
+           if (!isNaN(Number.parseInt(value,10)) && 
+                   Number.parseInt(value,10) >= zoom.min && 
+                   Number.parseInt(value,10) <= zoom.max) {
+             zoom.value = Number.parseInt(value,10);
+           }
+           if (!isNaN(Number.parseInt(min,10)) && 
+                   Number.parseInt(min,10) >= zoom.min && 
+                   Number.parseInt(min,10) <= zoom.max) {
+             zoom.min = Number.parseInt(min,10);
+           }
+           if (!isNaN(Number.parseInt(max,10)) && 
+                   Number.parseInt(max,10) >= zoom.min && 
+                   Number.parseInt(max,10) <= zoom.max) {
+             zoom.max = Number.parseInt(max,10);
+           }
+           template.zoom = zoom;
         } else if (shard) {
           tileVarNames.tile.server = name;
           tileVarNames.subdomains = inputs[i].servers.slice();
@@ -2794,6 +2909,30 @@ M.TemplatedTileLayer = L.TileLayer.extend({
               return input.getAttribute("value");
           };
         }
+      }
+      if (east && north) {
+        template.pcrs = {};
+        template.pcrs.vertical = north;
+        template.pcrs.horizontal = east;
+        template.pcrs.bounds = L.bounds([east.min,north.min],[east.max,north.max]);
+        // generate a single bounds in pcrs coordinates can use the bounds of
+        // a tile before its requested to determine if it should be requested
+        // (there's at least an intersection between the tile and these bounds)
+      } else if ( col && row) {
+        if (!isNaN(zoom.value)) {
+          // convert the tile bounds at this zoom to a pcrs bounds, then 
+          // go through the zoom min/max and create a tile-based bounds
+          // at each zoom that applies to the col/row values that constrain what tiles
+          // will be requested so that we don't generate too many 404s
+          template.tilematrix = 'bar';
+        }
+      } else if (long && lat) {
+        // generate a single bounds in gcrs coordinates can use the gcrs bounds of
+        // a tile before its requested to determine if it should be requested
+        // (there's at least an intersection between the tile and these bounds)
+        template.gcrs = 'beans';
+      } else {
+        console.log('Unable to determine bounds for tile template: ' + template.template);
       }
       return tileVarNames;
     }
