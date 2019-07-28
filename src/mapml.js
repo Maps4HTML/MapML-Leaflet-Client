@@ -2619,6 +2619,7 @@ M.TemplatedTileLayer = L.TileLayer.extend({
       // options first...
       L.setOptions(this, options);
       L.extend(this.options, this._setUpTileTemplateVars(template));
+      this._template = template;
       this._initContainer();
       // call the parent constructor with the template tref value, per the 
       // Leaflet tutorial: http://leafletjs.com/examples/extending/extending-1-classes.html#methods-of-the-parent-class
@@ -2657,7 +2658,9 @@ M.TemplatedTileLayer = L.TileLayer.extend({
             }
         }
         obj.r = this.options.detectRetina && L.Browser.retina && this.options.maxZoom > 0 ? '@2x' : '';
-        return L.Util.template(this._url, obj);
+        var tileIsWithinBounds = (obj.x && obj.y && obj.z && 
+            this._template.tilematrix.bounds[obj.z].contains(L.point(obj.x,obj.y)));
+        return tileIsWithinBounds? L.Util.template(this._url, obj) : '';
     },
     _tileMatrixToPCRSPosition: function (coords, pos) {
 // this is a tile:
@@ -2737,7 +2740,8 @@ M.TemplatedTileLayer = L.TileLayer.extend({
 
       var tileVarNames = {tile:{}},
           inputs = template.values,
-          crs = this.options.crs.options;
+          crs = this.options.crs.options,
+          zoom, east, north, lat, long, row, col;
       
       for (var i=0;i<template.values.length;i++) {
         var type = inputs[i].getAttribute("type"), 
@@ -2754,7 +2758,7 @@ M.TemplatedTileLayer = L.TileLayer.extend({
           switch (axis) {
             case("column"):
               tileVarNames.tile.col = name;
-              var col = { 
+              col = { 
                 name: name,
                 min: crs.crs.tilematrix.horizontal.min,
                 max: crs.crs.tilematrix.horizontal.max
@@ -2768,7 +2772,7 @@ M.TemplatedTileLayer = L.TileLayer.extend({
               break;
             case("row"):
               tileVarNames.tile.row = name;
-              var row = { 
+              row = { 
                 name: name,
                 min: crs.crs.tilematrix.vertical.min,
                 max: crs.crs.tilematrix.vertical.max
@@ -2781,7 +2785,7 @@ M.TemplatedTileLayer = L.TileLayer.extend({
               }
               break;
             case('longitude'):
-              var long = {
+              long = {
                 min: crs.crs.gcrs.horizontal.min,
                 max: crs.crs.gcrs.horizontal.max
               };
@@ -2800,7 +2804,7 @@ M.TemplatedTileLayer = L.TileLayer.extend({
               } 
               break;
             case("easting"):
-              var east = {
+              east = {
                 left: '',
                 right: '',
                 min: crs.crs.pcrs.horizontal.min,
@@ -2823,7 +2827,7 @@ M.TemplatedTileLayer = L.TileLayer.extend({
               } 
               break;
             case('latitude'):
-              var lat = {
+              lat = {
                 min: crs.crs.gcrs.vertical.min,
                 max: crs.crs.gcrs.vertical.max
               };
@@ -2842,7 +2846,7 @@ M.TemplatedTileLayer = L.TileLayer.extend({
               } 
               break;
             case("northing"):
-              var north = {
+              north = {
                 bottom: '',
                 top: '',
                 min: crs.crs.pcrs.vertical.min,
@@ -2870,7 +2874,7 @@ M.TemplatedTileLayer = L.TileLayer.extend({
         } else if (type.toLowerCase() === "zoom") {
           //<input name="..." type="zoom" value="0" min="0" max="17"/>
            tileVarNames.tile.zoom = name;
-           var zoom = {
+           zoom = {
              name: name,
              value: '', 
              min: 0, 
@@ -2912,25 +2916,43 @@ M.TemplatedTileLayer = L.TileLayer.extend({
       }
       if (east && north) {
         template.pcrs = {};
-        template.pcrs.vertical = north;
-        template.pcrs.horizontal = east;
         template.pcrs.bounds = L.bounds([east.min,north.min],[east.max,north.max]);
         // generate a single bounds in pcrs coordinates can use the bounds of
         // a tile before its requested to determine if it should be requested
         // (there's at least an intersection between the tile and these bounds)
       } else if ( col && row) {
         if (!isNaN(zoom.value)) {
+          var transformation = this.options.crs.transformation, 
+              scale = L.bind(this.options.crs.scale, this.options.crs);
+          tilematrix2pcrs = function (c,zoom) {
+            return transformation.untransform(c.multiplyBy(256),scale(zoom));
+          };
+          pcrs2tilematrix = function(c,zoom) {
+            return transformation.transform(c, scale(zoom)).divideBy(256).floor();
+          };
+          
           // convert the tile bounds at this zoom to a pcrs bounds, then 
           // go through the zoom min/max and create a tile-based bounds
           // at each zoom that applies to the col/row values that constrain what tiles
           // will be requested so that we don't generate too many 404s
-          template.tilematrix = 'bar';
+          var pcrsBounds = L.bounds(
+            tilematrix2pcrs(L.point([col.min,row.min]),zoom.value),
+            tilematrix2pcrs(L.point([col.max,row.max]),zoom.value)
+          );
+          
+          template.tilematrix = {bounds:[]};
+          for (var z=zoom.min; z <= zoom.max; z++) {
+            template.tilematrix.bounds[z] = 
+                L.bounds(pcrs2tilematrix(pcrsBounds.min,z),
+                  pcrs2tilematrix(pcrsBounds.max,z)
+                );
+          }
         }
       } else if (long && lat) {
         // generate a single bounds in gcrs coordinates can use the gcrs bounds of
         // a tile before its requested to determine if it should be requested
         // (there's at least an intersection between the tile and these bounds)
-        template.gcrs = 'beans';
+        template.gcrs = L.latLngBounds(L.latLng(lat.min,long.min),L.latLng(lat.max,long.max));
       } else {
         console.log('Unable to determine bounds for tile template: ' + template.template);
       }
