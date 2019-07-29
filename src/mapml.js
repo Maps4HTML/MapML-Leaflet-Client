@@ -902,7 +902,8 @@ M.MapMLLayer = L.Layer.extend({
               { pane: this._container,
                 imagePath: M.detectImagePath(this._map.getContainer()),
                 _leafletLayer: this,
-                crs: this.crs
+                crs: this.crs,
+                zoom: this._extent.querySelector('input[type="zoom" i]')
               }).addTo(map);
             }
         } else {
@@ -912,7 +913,8 @@ M.MapMLLayer = L.Layer.extend({
                   { pane: this._container,
                     imagePath: M.detectImagePath(this._map.getContainer()),
                     _leafletLayer: this,
-                    crs: this.crs
+                    crs: this.crs,
+                    zoom: this._extent.querySelector('input[type="zoom" i]')
                   }).addTo(map);
                 }
               }, this);
@@ -1504,6 +1506,10 @@ M.MapMLLayer = L.Layer.extend({
                         break;
                       }
                     }
+                    // TODO the issue here is that there may be a zoom input
+                    // that is not linked to a template, but which is describing
+                    // the service's available zoom levels and applies to all
+                    // templates.
                     if (template && vcount.length === inputs.length) {
                       // template has a matching input for every variable reference {varref}
                       layer._templateVars.push({template:template, type: ttype, values: inputs});
@@ -2643,6 +2649,9 @@ M.TemplatedTileLayer = L.TileLayer.extend({
       }
     },
     getTileUrl: function (coords) {
+        if (!this._template.tilematrix.bounds[coords.z].contains(coords)) {
+          return '';
+        }
         var obj = {};
         obj[this.options.tile.col] = coords.x;
         obj[this.options.tile.row] = coords.y;
@@ -2658,9 +2667,7 @@ M.TemplatedTileLayer = L.TileLayer.extend({
             }
         }
         obj.r = this.options.detectRetina && L.Browser.retina && this.options.maxZoom > 0 ? '@2x' : '';
-        var tileIsWithinBounds = (obj.x && obj.y && obj.z && 
-            this._template.tilematrix.bounds[obj.z].contains(L.point(obj.x,obj.y)));
-        return tileIsWithinBounds? L.Util.template(this._url, obj) : '';
+        return L.Util.template(this._url, obj);
     },
     _tileMatrixToPCRSPosition: function (coords, pos) {
 // this is a tile:
@@ -2914,22 +2921,23 @@ M.TemplatedTileLayer = L.TileLayer.extend({
           };
         }
       }
+      var transformation = this.options.crs.transformation, 
+          scale = L.bind(this.options.crs.scale, this.options.crs);
+      tilematrix2pcrs = function (c,zoom) {
+        return transformation.untransform(c.multiplyBy(256),scale(zoom));
+      };
+      pcrs2tilematrix = function(c,zoom) {
+        return transformation.transform(c, scale(zoom)).divideBy(256).floor();
+      };
       if (east && north) {
+        
         template.pcrs = {};
         template.pcrs.bounds = L.bounds([east.min,north.min],[east.max,north.max]);
-        // generate a single bounds in pcrs coordinates can use the bounds of
-        // a tile before its requested to determine if it should be requested
-        // (there's at least an intersection between the tile and these bounds)
+        template.pcrs.easting = east;
+        template.pcrs.northing = north;
+        
       } else if ( col && row) {
         if (!isNaN(zoom.value)) {
-          var transformation = this.options.crs.transformation, 
-              scale = L.bind(this.options.crs.scale, this.options.crs);
-          tilematrix2pcrs = function (c,zoom) {
-            return transformation.untransform(c.multiplyBy(256),scale(zoom));
-          };
-          pcrs2tilematrix = function(c,zoom) {
-            return transformation.transform(c, scale(zoom)).divideBy(256).floor();
-          };
           
           // convert the tile bounds at this zoom to a pcrs bounds, then 
           // go through the zoom min/max and create a tile-based bounds
@@ -2941,20 +2949,37 @@ M.TemplatedTileLayer = L.TileLayer.extend({
           );
           
           template.tilematrix = {bounds:[]};
+          template.tilematrix.col = col;
+          template.tilematrix.row = row;
+
           for (var z=zoom.min; z <= zoom.max; z++) {
             template.tilematrix.bounds[z] = 
                 L.bounds(pcrs2tilematrix(pcrsBounds.min,z),
                   pcrs2tilematrix(pcrsBounds.max,z)
                 );
           }
-        }
+        } // what to do if there is no zoom?  A. The parent layer has an extent which should have a zoom
       } else if (long && lat) {
         // generate a single bounds in gcrs coordinates can use the gcrs bounds of
         // a tile before its requested to determine if it should be requested
         // (there's at least an intersection between the tile and these bounds)
-        template.gcrs = L.latLngBounds(L.latLng(lat.min,long.min),L.latLng(lat.max,long.max));
+        template.gcrs = {};
+        template.gcrs.bounds = L.latLngBounds(L.latLng(lat.min,long.min),L.latLng(lat.max,long.max));
+        template.gcrs.latitude = lat;
+        template.gcrs.longitude = long;
       } else {
         console.log('Unable to determine bounds for tile template: ' + template.template);
+      }
+      
+      if (template.tilematrix === undefined) { // build one
+        template.tilematrix = {bounds:[]};
+        var pcrsBounds = template.pcrs.bounds;
+        for (var z=template.zoom.min; z <= template.zoom.max; z++) {
+          template.tilematrix.bounds[z] = 
+              L.bounds(pcrs2tilematrix(pcrsBounds.min,z),
+                pcrs2tilematrix(pcrsBounds.max,z)
+              );
+        }
       }
       return tileVarNames;
     }
