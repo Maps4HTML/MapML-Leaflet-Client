@@ -902,8 +902,7 @@ M.MapMLLayer = L.Layer.extend({
               { pane: this._container,
                 imagePath: M.detectImagePath(this._map.getContainer()),
                 _leafletLayer: this,
-                crs: this.crs,
-                zoom: this._extent.querySelector('input[type="zoom" i]')
+                crs: this.crs
               }).addTo(map);
             }
         } else {
@@ -913,8 +912,7 @@ M.MapMLLayer = L.Layer.extend({
                   { pane: this._container,
                     imagePath: M.detectImagePath(this._map.getContainer()),
                     _leafletLayer: this,
-                    crs: this.crs,
-                    zoom: this._extent.querySelector('input[type="zoom" i]')
+                    crs: this.crs
                   }).addTo(map);
                 }
               }, this);
@@ -1309,7 +1307,9 @@ M.MapMLLayer = L.Layer.extend({
                   layer._templateVars = [];
                   // set up the URL template and associated inputs (which yield variable values when processed)
                   var tlist = serverExtent.querySelectorAll('link[rel=tile],link[rel=image],link[rel=features],link[rel=query]'),
-                      varNamesRe = (new RegExp('(?:\{)(.*?)(?:\})','g'));
+                      varNamesRe = (new RegExp('(?:\{)(.*?)(?:\})','g')),
+                      zoom = serverExtent.querySelector('input[type="zoom" i]'),
+                      includesZoom = false;
                   for (var i=0;i< tlist.length;i++) {
                     var t = tlist[i],
                         template = t.getAttribute('tref'), v,
@@ -1322,6 +1322,7 @@ M.MapMLLayer = L.Layer.extend({
                       inp = serverExtent.querySelector('input[name='+varName+'],select[name='+varName+']');
                       if (inp) {
                         inputs.push(inp);
+                        includesZoom = inp.hasAttribute("type") && inp.getAttribute("type").toLowerCase() === "zoom";
                         if (inp.hasAttribute('shard')) {
                           var id = inp.getAttribute('list');
                           inp.servers = [];
@@ -1364,6 +1365,9 @@ M.MapMLLayer = L.Layer.extend({
                     if (template && vcount.length === inputs.length) {
                       if (ttype === 'query') {
                         layer.queryable = true;
+                      }
+                      if(!includesZoom && zoom) {
+                        inputs.push(zoom);
                       }
                       // template has a matching input for every variable reference {varref}
                       layer._templateVars.push({template:template, title:title, type: ttype, values: inputs});
@@ -1488,7 +1492,9 @@ M.MapMLLayer = L.Layer.extend({
                   layer._templateVars = [];
                   // set up the URL template and associated inputs (which yield variable values when processed)
                   var tlist = serverExtent.querySelectorAll('link[rel=tile],link[rel=image],link[rel=features],link[rel=query]'),
-                      varNamesRe = (new RegExp('(?:\{)(.*?)(?:\})','g'));
+                      varNamesRe = (new RegExp('(?:\{)(.*?)(?:\})','g')),
+                      zoom = serverExtent.querySelector('input[type="zoom" i]'),
+                      includesZoom = false;
                   for (i=0;i< tlist.length;i++) {
                     var t = tlist[i],
                         template = t.getAttribute('tref'), v,
@@ -1500,18 +1506,20 @@ M.MapMLLayer = L.Layer.extend({
                       inp = serverExtent.querySelector('input[name='+varName+']');
                       if (inp) {
                         inputs.push(inp);
+                        includesZoom = inp.hasAttribute("type") && inp.getAttribute("type").toLowerCase() === "zoom";
+
                       } else {
                         console.log('input with name='+varName+' not found for template variable of same name');
                         // no match found, template won't be used
                         break;
                       }
                     }
-                    // TODO the issue here is that there may be a zoom input
-                    // that is not linked to a template, but which is describing
-                    // the service's available zoom levels and applies to all
-                    // templates.
                     if (template && vcount.length === inputs.length) {
                       // template has a matching input for every variable reference {varref}
+                      if(!includesZoom && zoom) {
+                        // except zoom 
+                        inputs.push(zoom);
+                      }
                       layer._templateVars.push({template:template, type: ttype, values: inputs});
                     }
                   }
@@ -2624,7 +2632,7 @@ M.TemplatedTileLayer = L.TileLayer.extend({
       // _setUpTileTemplateVars needs options.crs, not available unless we set
       // options first...
       L.setOptions(this, options);
-      L.extend(this.options, this._setUpTileTemplateVars(template));
+      this._setUpTileTemplateVars(template);
       this._template = template;
       this._initContainer();
       // call the parent constructor with the template tref value, per the 
@@ -2649,21 +2657,22 @@ M.TemplatedTileLayer = L.TileLayer.extend({
       }
     },
     getTileUrl: function (coords) {
-        if (!this._template.tilematrix.bounds[coords.z].contains(coords)) {
+        if (coords.z >= this._template.tilematrix.bounds.length || 
+                !this._template.tilematrix.bounds[coords.z].contains(coords)) {
           return '';
         }
         var obj = {};
-        obj[this.options.tile.col] = coords.x;
-        obj[this.options.tile.row] = coords.y;
-        obj[this.options.tile.zoom] = this._getZoomForUrl();
-        obj[this.options.tile.left] = this._tileMatrixToPCRSPosition(coords, 'top-left').x;
-        obj[this.options.tile.right] = this._tileMatrixToPCRSPosition(coords, 'top-right').x;
-        obj[this.options.tile.top] = this._tileMatrixToPCRSPosition(coords, 'top-left').y;
-        obj[this.options.tile.bottom] = this._tileMatrixToPCRSPosition(coords, 'bottom-left').y;
-        obj[this.options.tile.server] = this._getSubdomain(coords);
-        for (var v in this.options.tile) {
+        obj[this._template.tilematrix.col.name] = coords.x;
+        obj[this._template.tilematrix.row.name] = coords.y;
+        obj[this._template.zoom.name] = this._getZoomForUrl();
+        obj[this._template.pcrs.easting.left] = this._tileMatrixToPCRSPosition(coords, 'top-left').x;
+        obj[this._template.pcrs.easting.right] = this._tileMatrixToPCRSPosition(coords, 'top-right').x;
+        obj[this._template.pcrs.northing.top] = this._tileMatrixToPCRSPosition(coords, 'top-left').y;
+        obj[this._template.pcrs.northing.bottom] = this._tileMatrixToPCRSPosition(coords, 'bottom-left').y;
+        obj[this._template.tile.server] = this._getSubdomain(coords);
+        for (var v in this._template.tile) {
             if (["row","col","zoom","left","right","top","bottom"].indexOf(v) < 0) {
-                obj[v] = this.options.tile[v];
+                obj[v] = this._template.tile[v];
             }
         }
         obj.r = this.options.detectRetina && L.Browser.retina && this.options.maxZoom > 0 ? '@2x' : '';
@@ -2744,11 +2753,10 @@ M.TemplatedTileLayer = L.TileLayer.extend({
       //  right: 'rightvarname', 
       //  top: 'topvarname', 
       //  bottom: 'bottomvarname'}
-
-      var tileVarNames = {tile:{}},
-          inputs = template.values,
+      template.tile = {};
+      var inputs = template.values,
           crs = this.options.crs.options,
-          zoom, east, north, lat, long, row, col;
+          zoom, east, north, row, col;
       
       for (var i=0;i<template.values.length;i++) {
         var type = inputs[i].getAttribute("type"), 
@@ -2764,11 +2772,10 @@ M.TemplatedTileLayer = L.TileLayer.extend({
         if (type === "location" && units === "tilematrix") {
           switch (axis) {
             case("column"):
-              tileVarNames.tile.col = name;
-              col = { 
+              col = {
                 name: name,
                 min: crs.crs.tilematrix.horizontal.min,
-                max: crs.crs.tilematrix.horizontal.max
+                max: crs.crs.tilematrix.horizontal.max(crs.resolutions.length-1)
               };
               if (!isNaN(Number.parseInt(min,10))) {
                 col.min = Number.parseInt(min,10);
@@ -2778,11 +2785,10 @@ M.TemplatedTileLayer = L.TileLayer.extend({
               }
               break;
             case("row"):
-              tileVarNames.tile.row = name;
-              row = { 
+              row = {
                 name: name,
                 min: crs.crs.tilematrix.vertical.min,
-                max: crs.crs.tilematrix.vertical.max
+                max:  crs.crs.tilematrix.vertical.max(crs.resolutions.length-1)
               };
               if (!isNaN(Number.parseInt(min,10))) {
                 row.min = Number.parseInt(min,10);
@@ -2791,18 +2797,14 @@ M.TemplatedTileLayer = L.TileLayer.extend({
                 row.max = Number.parseInt(max,10);
               }
               break;
-            // I am thinking that even when lat / long are used to reference
-            // tiles, they are sort of acting as northing / easting respectively
-            // and so to keep it simple I fold them into the pcrs, so there
-            // will never be a latlongbounds returned, only a regular bounds
             case('longitude'):
             case("easting"):
-              east = {
-                left: '',
-                right: '',
-                min: crs.crs.pcrs.horizontal.min,
-                max: crs.crs.pcrs.horizontal.max
-              };
+              if (!east) {
+                east = {
+                  min: crs.crs.pcrs.horizontal.min,
+                  max: crs.crs.pcrs.horizontal.max
+                };
+              }
               if (!isNaN(Number.parseFloat(min))) {
                 east.min = Number.parseFloat(min);
               }
@@ -2811,22 +2813,20 @@ M.TemplatedTileLayer = L.TileLayer.extend({
               }
               if (position) {
                 if (position.match(/.*?-left/i)) {
-                  tileVarNames.tile.left = name;
                   east.left = name;
                 } else if (position.match(/.*?-right/i)) {
-                  tileVarNames.tile.right = name;
                   east.right = name;
                 }
-              } 
+              }
               break;
             case('latitude'):
             case("northing"):
-              north = {
-                bottom: '',
-                top: '',
-                min: crs.crs.pcrs.vertical.min,
-                max: crs.crs.pcrs.vertical.max
-              };
+              if (!north) {
+                north = {
+                  min: crs.crs.pcrs.vertical.min,
+                  max: crs.crs.pcrs.vertical.max
+                };
+              }
               if (!isNaN(Number.parseFloat(min))) {
                 north.min = Number.parseFloat(min);
               }
@@ -2835,10 +2835,8 @@ M.TemplatedTileLayer = L.TileLayer.extend({
               }
               if (position) {
                 if (position.match(/top-.*?/i)) {
-                  tileVarNames.tile.top = name;
                   north.top = name;
                 } else if (position.match(/bottom-.*?/i)) {
-                  tileVarNames.tile.bottom = name;
                   north.bottom = name;
                 }
               } 
@@ -2848,10 +2846,8 @@ M.TemplatedTileLayer = L.TileLayer.extend({
           }
         } else if (type.toLowerCase() === "zoom") {
           //<input name="..." type="zoom" value="0" min="0" max="17"/>
-           tileVarNames.tile.zoom = name;
            zoom = {
              name: name,
-             value: '', 
              min: 0, 
              max: crs.resolutions.length
            };
@@ -2872,19 +2868,19 @@ M.TemplatedTileLayer = L.TileLayer.extend({
            }
            template.zoom = zoom;
         } else if (shard) {
-          tileVarNames.tile.server = name;
-          tileVarNames.subdomains = inputs[i].servers.slice();
+          template.tile.server = name;
+          template.tile.subdomains = inputs[i].servers.slice();
         } else if (select) {
             /*jshint -W104 */
           const parsedselect = inputs[i].htmlselect;
-          tileVarNames.tile[name] = function() {
+          template.tile[name] = function() {
               return parsedselect.value;
           };
         } else {
            // needs to be a const otherwise it gets overwritten
           /*jshint -W104 */
           const input = inputs[i];
-          tileVarNames.tile[name] = function () {
+          template.tile[name] = function () {
               return input.getAttribute("value");
           };
         }
@@ -2904,8 +2900,7 @@ M.TemplatedTileLayer = L.TileLayer.extend({
         template.pcrs.easting = east;
         template.pcrs.northing = north;
         
-      } else if ( col && row) {
-        if (!isNaN(zoom.value)) {
+      } else if ( col && row && !isNaN(zoom.value)) {
           
           // convert the tile bounds at this zoom to a pcrs bounds, then 
           // go through the zoom min/max and create a tile-based bounds
@@ -2913,6 +2908,8 @@ M.TemplatedTileLayer = L.TileLayer.extend({
           // will be requested so that we don't generate too many 404s
           if (!template.pcrs) {
             template.pcrs = {};
+            template.pcrs.easting = '';
+            template.pcrs.northing = '';
           }
           
           template.pcrs.bounds = L.bounds(
@@ -2924,30 +2921,29 @@ M.TemplatedTileLayer = L.TileLayer.extend({
           template.tilematrix.col = col;
           template.tilematrix.row = row;
 
-        } 
       } else {
         console.log('Unable to determine bounds for tile template: ' + template.template);
       }
       
       if (!template.tilematrix) {
         template.tilematrix = {};
+        template.tilematrix.col = {};
+        template.tilematrix.row = {};
       }
       template.tilematrix.bounds = [];
       var pcrsBounds = template.pcrs.bounds;
-      // TODO if no template.zoom, use extent zoom range, which might be crs derived,
-      // but might not. the following is a hack to get it workign while figuring
-      // out how to get the extent zoom in here.
+      // the template should _always_ have a zoom, because we force it to
+      // by first processing the extent to determine the zoom and if none, adding
+      // one and second by copying that zoom into the set of template variable inputs
+      // even if it is not referenced by one of the template's variable references
       var zmin = template.zoom?template.zoom.min:0,
           zmax = template.zoom?template.zoom.max:crs.resolutions.length;
-      for (var z= zmin; z <= zmax; z++) {
-        template.tilematrix.bounds[z] = 
+      for (var z=0; z <= zmax; z++) {
+        template.tilematrix.bounds[z] = (z >= zmin ?
             L.bounds(pcrs2tilematrix(pcrsBounds.min,z),
-              pcrs2tilematrix(pcrsBounds.max,z)
-            );
+              pcrs2tilematrix(pcrsBounds.max,z)) :
+                      L.bounds(L.point([-1,-1]),L.point([-1,-1])));
       }
-      // maybe we can use the names that have been added to the template and
-      // not return anything.
-      return tileVarNames;
     }
 });
 M.templatedTileLayer = function(template, options) {
