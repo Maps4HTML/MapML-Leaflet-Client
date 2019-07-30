@@ -2791,25 +2791,11 @@ M.TemplatedTileLayer = L.TileLayer.extend({
                 row.max = Number.parseInt(max,10);
               }
               break;
+            // I am thinking that even when lat / long are used to reference
+            // tiles, they are sort of acting as northing / easting respectively
+            // and so to keep it simple I fold them into the pcrs, so there
+            // will never be a latlongbounds returned, only a regular bounds
             case('longitude'):
-              long = {
-                min: crs.crs.gcrs.horizontal.min,
-                max: crs.crs.gcrs.horizontal.max
-              };
-              if (!isNaN(Number.parseFloat(min))) {
-                long.min = Number.parseFloat(min);
-              }
-              if (!isNaN(Number.parseFloat(max))) {
-                long.max = Number.parseFloat(max);
-              }
-              if (position) {
-                if (position.match(/.*?-left/i)) {
-                  tileVarNames.tile.left = name;
-                } else if (position.match(/.*?-right/i)) {
-                  tileVarNames.tile.right = name;
-                }
-              } 
-              break;
             case("easting"):
               east = {
                 left: '',
@@ -2834,24 +2820,6 @@ M.TemplatedTileLayer = L.TileLayer.extend({
               } 
               break;
             case('latitude'):
-              lat = {
-                min: crs.crs.gcrs.vertical.min,
-                max: crs.crs.gcrs.vertical.max
-              };
-              if (!isNaN(Number.parseFloat(min))) {
-                lat.min = Number.parseFloat(min);
-              }
-              if (!isNaN(Number.parseFloat(max))) {
-                lat.max = Number.parseFloat(max);
-              }
-              if (position) {
-                if (position.match(/top-.*?/i)) {
-                  tileVarNames.tile.top = name;
-                } else if (position.match(/bottom-.*?/i)) {
-                  tileVarNames.tile.bottom = name;
-                }
-              } 
-              break;
             case("northing"):
               north = {
                 bottom: '',
@@ -2943,44 +2911,42 @@ M.TemplatedTileLayer = L.TileLayer.extend({
           // go through the zoom min/max and create a tile-based bounds
           // at each zoom that applies to the col/row values that constrain what tiles
           // will be requested so that we don't generate too many 404s
-          var pcrsBounds = L.bounds(
+          if (!template.pcrs) {
+            template.pcrs = {};
+          }
+          
+          template.pcrs.bounds = L.bounds(
             tilematrix2pcrs(L.point([col.min,row.min]),zoom.value),
             tilematrix2pcrs(L.point([col.max,row.max]),zoom.value)
           );
           
-          template.tilematrix = {bounds:[]};
+          template.tilematrix = {};
           template.tilematrix.col = col;
           template.tilematrix.row = row;
 
-          for (var z=zoom.min; z <= zoom.max; z++) {
-            template.tilematrix.bounds[z] = 
-                L.bounds(pcrs2tilematrix(pcrsBounds.min,z),
-                  pcrs2tilematrix(pcrsBounds.max,z)
-                );
-          }
-        } // what to do if there is no zoom?  A. The parent layer has an extent which should have a zoom
-      } else if (long && lat) {
-        // generate a single bounds in gcrs coordinates can use the gcrs bounds of
-        // a tile before its requested to determine if it should be requested
-        // (there's at least an intersection between the tile and these bounds)
-        template.gcrs = {};
-        template.gcrs.bounds = L.latLngBounds(L.latLng(lat.min,long.min),L.latLng(lat.max,long.max));
-        template.gcrs.latitude = lat;
-        template.gcrs.longitude = long;
+        } 
       } else {
         console.log('Unable to determine bounds for tile template: ' + template.template);
       }
       
-      if (template.tilematrix === undefined) { // build one
-        template.tilematrix = {bounds:[]};
-        var pcrsBounds = template.pcrs.bounds;
-        for (var z=template.zoom.min; z <= template.zoom.max; z++) {
-          template.tilematrix.bounds[z] = 
-              L.bounds(pcrs2tilematrix(pcrsBounds.min,z),
-                pcrs2tilematrix(pcrsBounds.max,z)
-              );
-        }
+      if (!template.tilematrix) {
+        template.tilematrix = {};
       }
+      template.tilematrix.bounds = [];
+      var pcrsBounds = template.pcrs.bounds;
+      // TODO if no template.zoom, use extent zoom range, which might be crs derived,
+      // but might not. the following is a hack to get it workign while figuring
+      // out how to get the extent zoom in here.
+      var zmin = template.zoom?template.zoom.min:0,
+          zmax = template.zoom?template.zoom.max:crs.resolutions.length;
+      for (var z= zmin; z <= zmax; z++) {
+        template.tilematrix.bounds[z] = 
+            L.bounds(pcrs2tilematrix(pcrsBounds.min,z),
+              pcrs2tilematrix(pcrsBounds.max,z)
+            );
+      }
+      // maybe we can use the names that have been added to the template and
+      // not return anything.
       return tileVarNames;
     }
 });
