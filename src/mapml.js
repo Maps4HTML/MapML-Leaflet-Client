@@ -1251,7 +1251,7 @@ M.MapMLLayer = L.Layer.extend({
                   // set up the URL template and associated inputs (which yield variable values when processed)
                   var tlist = serverExtent.querySelectorAll('link[rel=tile],link[rel=image],link[rel=features],link[rel=query]'),
                       varNamesRe = (new RegExp('(?:\{)(.*?)(?:\})','g')),
-                      zoom = serverExtent.querySelector('input[type="zoom" i]'),
+                      zoomInput = serverExtent.querySelector('input[type="zoom" i]'),
                       includesZoom = false;
                   for (var i=0;i< tlist.length;i++) {
                     var t = tlist[i],
@@ -1309,8 +1309,8 @@ M.MapMLLayer = L.Layer.extend({
                       if (ttype === 'query') {
                         layer.queryable = true;
                       }
-                      if(!includesZoom && zoom) {
-                        inputs.push(zoom);
+                      if(!includesZoom && zoomInput) {
+                        inputs.push(zoomInput);
                       }
                       // template has a matching input for every variable reference {varref}
                       layer._templateVars.push({template:template, title:title, type: ttype, values: inputs});
@@ -1436,7 +1436,7 @@ M.MapMLLayer = L.Layer.extend({
                   // set up the URL template and associated inputs (which yield variable values when processed)
                   var tlist = serverExtent.querySelectorAll('link[rel=tile],link[rel=image],link[rel=features],link[rel=query]'),
                       varNamesRe = (new RegExp('(?:\{)(.*?)(?:\})','g')),
-                      zoom = serverExtent.querySelector('input[type="zoom" i]'),
+                      zoomInput = serverExtent.querySelector('input[type="zoom" i]'),
                       includesZoom = false;
                   for (i=0;i< tlist.length;i++) {
                     var t = tlist[i],
@@ -1459,9 +1459,9 @@ M.MapMLLayer = L.Layer.extend({
                     }
                     if (template && vcount.length === inputs.length) {
                       // template has a matching input for every variable reference {varref}
-                      if(!includesZoom && zoom) {
+                      if(!includesZoom && zoomInput) {
                         // except zoom 
-                        inputs.push(zoom);
+                        inputs.push(zoomInput);
                       }
                       layer._templateVars.push({template:template, type: ttype, values: inputs});
                     }
