@@ -2633,6 +2633,9 @@ M.TemplatedTileLayer = L.TileLayer.extend({
       // options first...
       L.setOptions(this, options);
       this._setUpTileTemplateVars(template);
+      if (template.tile.subdomains) {
+        L.setOptions(this, L.extend(this.options, {subdomains: template.tile.subdomains}));
+      }
       this._template = template;
       this._initContainer();
       // call the parent constructor with the template tref value, per the 
