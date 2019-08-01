@@ -108,40 +108,136 @@ window.M = M;
    return path;
   };
   M.mime = "text/mapml";
-  M.WGS84 = new L.Proj.CRS('EPSG:4326','+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs ', 
-  {
-      origin: [-180,+90],
-      bounds: L.bounds([[-180,-90],[180,90]]),
-      resolutions: [
-        0.703125,
-        0.3515625,
-        0.17578125,
-        0.087890625,
-        0.0439453125,
-        0.02197265625,
-        0.010986328125,
-        0.0054931640625,
-        0.00274658203125,
-        0.001373291015625,
-        0.0006866455078125,
-        0.0003433227539062,
-        0.0001716613769531,
-        0.0000858306884766,
-        0.0000429153442383,
-        0.0000214576721191,
-        0.0000107288360596,
-        0.0000053644180298,
-        0.0000026822090149,
-        0.0000013411045074,
-        0.0000006705522537,
-        0.0000003352761269
-      ]
+  // see https://leafletjs.com/reference-1.5.0.html#crs-l-crs-base
+  // "new classes can't inherit from (L.CRS), and methods can't be added 
+  // to (L.CRS.anything) with the include function
+  // so we'll use the options property as a way to integrate needed 
+  // properties and methods...
+  M.WGS84 = new L.Proj.CRS('EPSG:4326','+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs ', {
+    origin: [-180,+90],
+    bounds: L.bounds([[-180,-90],[180,90]]),
+    resolutions: [
+      0.703125,
+      0.3515625,
+      0.17578125,
+      0.087890625,
+      0.0439453125,
+      0.02197265625,
+      0.010986328125,
+      0.0054931640625,
+      0.00274658203125,
+      0.001373291015625,
+      0.0006866455078125,
+      0.0003433227539062,
+      0.0001716613769531,
+      0.0000858306884766,
+      0.0000429153442383,
+      0.0000214576721191,
+      0.0000107288360596,
+      0.0000053644180298,
+      0.0000026822090149,
+      0.0000013411045074,
+      0.0000006705522537,
+      0.0000003352761269
+    ],
+    crs: {
+      tcrs: {
+        horizontal: {
+          name: "x",
+          min: 0, 
+          max: zoom => (M.WGS84.options.bounds.getSize().x / M.WGS84.options.resolutions[zoom]).toFixed()
+        },
+        vertical: {
+          name: "y",
+          min:0, 
+          max: zoom => (M.WGS84.options.bounds.getSize().y / M.WGS84.options.resolutions[zoom]).toFixed()
+        },
+        bounds: zoom => L.bounds([M.WGS84.options.crs.tcrs.horizontal.min,
+                          M.WGS84.options.crs.tcrs.vertical.min],
+                         [M.WGS84.options.crs.tcrs.horizontal.max(zoom),
+                          M.WGS84.options.crs.tcrs.vertical.max(zoom)])
+      },
+      pcrs: {
+        horizontal: {
+          name: "longitude",
+          get min() {return M.WGS84.options.crs.gcrs.horizontal.min;},
+          get max() {return M.WGS84.options.crs.gcrs.horizontal.max;}
+        }, 
+        vertical: {
+          name: "latitude", 
+          get min() {return M.WGS84.options.crs.gcrs.vertical.min;},
+          get max() {return M.WGS84.options.crs.gcrs.vertical.max;}
+        },
+        get bounds() {return M.WGS84.options.bounds;}
+      }, 
+      gcrs: {
+        horizontal: {
+          name: "longitude",
+          // set min/max axis values from EPSG registry area of use, retrieved 2019-07-25
+          min: -180.0,
+          max: 180.0
+        }, 
+        vertical: {
+          name: "latitude",
+          // set min/max axis values from EPSG registry area of use, retrieved 2019-07-25
+          min: -90.0,
+          max: 90.0
+        },
+        get bounds() {return L.latLngBounds(
+              [M.WGS84.options.crs.gcrs.vertical.min,M.WGS84.options.crs.gcrs.horizontal.min],
+              [M.WGS84.options.crs.gcrs.vertical.max,M.WGS84.options.crs.gcrs.horizontal.max]);}
+      },
+      map: {
+        horizontal: {
+          name: "i",
+          min: 0,
+          max: map => map.getSize().x
+        },
+        vertical: {
+          name: "j",
+          min: 0,
+          max: map => map.getSize().y
+        },
+        bounds: map => L.bounds(L.point([0,0]),map.getSize())
+      },
+      tile: {
+        horizontal: {
+          name: "i",
+          min: 0,
+          max: 256
+        },
+        vertical: {
+          name: "j",
+          min: 0,
+          max: 256
+        },
+        get bounds() {return L.bounds(
+                  [M.WGS84.options.crs.tile.horizontal.min,M.WGS84.options.crs.tile.vertical.min],
+                  [M.WGS84.options.crs.tile.horizontal.max,M.WGS84.options.crs.tile.vertical.max]);}
+      },
+      tilematrix: {
+        horizontal: {
+          name: "column",
+          min: 0,
+          max: zoom => (M.WGS84.options.crs.tcrs.horizontal.max(zoom) / M.WGS84.options.crs.tile.bounds.getSize().x).toFixed()
+        },
+        vertical: {
+          name: "row",
+          min: 0,
+          max: zoom => (M.WGS84.options.crs.tcrs.vertical.max(zoom) / M.WGS84.options.crs.tile.bounds.getSize().y).toFixed()
+        },
+        bounds: zoom => L.bounds(
+                 [M.WGS84.options.crs.tilematrix.horizontal.min,
+                  M.WGS84.options.crs.tilematrix.vertical.min],
+                 [M.WGS84.options.crs.tilematrix.horizontal.max(zoom),
+                  M.WGS84.options.crs.tilematrix.vertical.max(zoom)])
+      }
+    }
   });
   M.CBMTILE = new L.Proj.CRS('EPSG:3978',
-  '+proj=lcc +lat_1=49 +lat_2=77 +lat_0=49 +lon_0=-95 +x_0=0 +y_0=0 +ellps=GRS80 +datum=NAD83 +units=m +no_defs',
-  {
+  '+proj=lcc +lat_1=49 +lat_2=77 +lat_0=49 +lon_0=-95 +x_0=0 +y_0=0 +ellps=GRS80 +datum=NAD83 +units=m +no_defs', {
     origin: [-34655800, 39310000],
-    bounds: L.bounds([[-7786476.885838887,-5153821.09213678],[7148753.233541353,7928343.534071138]]),
+    bounds: L.bounds([[-34655800,-39000000],[10000000,39310000]]),
     resolutions: [
       38364.660062653464, 
       22489.62831258996, 
@@ -169,11 +265,101 @@ window.M = M;
       0.18520870375074083,
       0.11112522225044451,
       0.066145965625264591
-    ]
+    ],
+    crs: {
+      tcrs: {
+        horizontal: {
+          name: "x",
+          min: 0, 
+          max: zoom => (M.CBMTILE.options.bounds.getSize().x / M.CBMTILE.options.resolutions[zoom]).toFixed()
+        },
+        vertical: {
+          name: "y",
+          min:0, 
+          max: zoom => (M.CBMTILE.options.bounds.getSize().y / M.CBMTILE.options.resolutions[zoom]).toFixed()
+        },
+        bounds: zoom => L.bounds([M.CBMTILE.options.crs.tcrs.horizontal.min,
+                          M.CBMTILE.options.crs.tcrs.vertical.min],
+                         [M.CBMTILE.options.crs.tcrs.horizontal.max(zoom),
+                          M.CBMTILE.options.crs.tcrs.vertical.max(zoom)])
+      },
+      pcrs: {
+        horizontal: {
+          name: "easting",
+          get min() {return M.CBMTILE.options.bounds.min.x;},
+          get max() {return M.CBMTILE.options.bounds.max.x;}
+        }, 
+        vertical: {
+          name: "northing", 
+          get min() {return M.CBMTILE.options.bounds.min.y;},
+          get max() {return M.CBMTILE.options.bounds.max.y;}
+        },
+        get bounds() {return M.CBMTILE.options.bounds;}
+      }, 
+      gcrs: {
+        horizontal: {
+          name: "longitude",
+          // set min/max axis values from EPSG registry area of use, retrieved 2019-07-25
+          min: -141.01,
+          max: -47.74
+        }, 
+        vertical: {
+          name: "latitude",
+          // set min/max axis values from EPSG registry area of use, retrieved 2019-07-25
+          min: 40.04,
+          max: 86.46
+        },
+        get bounds() {return L.latLngBounds(
+              [M.CBMTILE.options.crs.gcrs.vertical.min,M.CBMTILE.options.crs.gcrs.horizontal.min],
+              [M.CBMTILE.options.crs.gcrs.vertical.max,M.CBMTILE.options.crs.gcrs.horizontal.max]);}
+      },
+      map: {
+        horizontal: {
+          name: "i",
+          min: 0,
+          max: map => map.getSize().x
+        },
+        vertical: {
+          name: "j",
+          min: 0,
+          max: map => map.getSize().y
+        },
+        bounds: map => L.bounds(L.point([0,0]),map.getSize())
+      },
+      tile: {
+        horizontal: {
+          name: "i",
+          min: 0,
+          max: 256
+        },
+        vertical: {
+          name: "j",
+          min: 0,
+          max: 256
+        },
+        get bounds() {return L.bounds(
+                  [M.CBMTILE.options.crs.tile.horizontal.min,M.CBMTILE.options.crs.tile.vertical.min],
+                  [M.CBMTILE.options.crs.tile.horizontal.max,M.CBMTILE.options.crs.tile.vertical.max]);}
+      },
+      tilematrix: {
+        horizontal: {
+          name: "column",
+          min: 0,
+          max: zoom => (M.CBMTILE.options.crs.tcrs.horizontal.max(zoom) / M.CBMTILE.options.crs.tile.bounds.getSize().x).toFixed()
+        },
+        vertical: {
+          name: "row",
+          min: 0,
+          max: zoom => (M.CBMTILE.options.crs.tcrs.vertical.max(zoom) / M.CBMTILE.options.crs.tile.bounds.getSize().y).toFixed()
+        },
+        bounds: zoom => L.bounds([0,0],
+                 [M.CBMTILE.options.crs.tilematrix.horizontal.max(zoom),
+                  M.CBMTILE.options.crs.tilematrix.vertical.max(zoom)])
+      }
+    }
   });
-    M.APSTILE = new L.Proj.CRS('EPSG:5936',
-  '+proj=stere +lat_0=90 +lat_ts=50 +lon_0=-150 +k=0.994 +x_0=2000000 +y_0=2000000 +datum=WGS84 +units=m +no_defs',
-  {
+  M.APSTILE = new L.Proj.CRS('EPSG:5936',
+  '+proj=stere +lat_0=90 +lat_ts=50 +lon_0=-150 +k=0.994 +x_0=2000000 +y_0=2000000 +datum=WGS84 +units=m +no_defs', {
     origin: [-2.8567784109255E7, 3.2567784109255E7],
     bounds: L.bounds([[-28567784.109254867,-28567784.109254755],[32567784.109255023,32567784.10925506]]),
     resolutions: [
@@ -197,190 +383,221 @@ window.M = M;
       1.82198191331174,
       0.910990956788164,
       0.45549547826179
-    ]
-  });
-    M.OSMTILE = L.CRS.EPSG3857;
-    L.setOptions(M.OSMTILE,
-      { 
-        origin: [M.OSMTILE.projection.bounds.min.x, M.OSMTILE.projection.bounds.max.y],
-        bounds: M.OSMTILE.projection.bounds,
-        axes: {
-          tcrs: {
-            x: {
-              name: "x",
-              min: 0, 
-              max: function (zoom) {
-                return M.OSMTILE.getProjectedBounds(zoom).max.x;
-              }
-            },
-            y: {
-              name: "y",
-              min:0, 
-              max: function (zoom) {
-                return M.OSMTILE.getProjectedBounds(zoom).max.y;
-              }
-            },
-            z: {
-              name: "z", // zoom
-              min: 0,
-              get max() {
-                return M.OSMTILE.options.resolutions.length;
-              }
-            }
-          },
-          pcrs: {
-            easting: {
-              name: "easting",
-              get min () { 
-                return M.OSMTILE.options.bounds.min.x;
-              },
-              get max() {
-                return M.OSMTILE.options.bounds.max.x;
-              }}, 
-            northing: {
-              name: "northing", 
-              get min () { 
-                return M.OSMTILE.options.bounds.min.y; 
-              },
-              get max() { 
-                return M.OSMTILE.options.bounds.max.y; 
-              }}
-          }, 
-          gcrs: {
-            longitude: {
-              name: "longitude",
-              get min() {
-                // TODO should unproject bounds to be DRY
-                return M.OSMTILE.unproject(M.OSMTILE.projection.bounds.min).lng;
-              },
-              get max() {
-                // TODO sTODO should unproject bounds to be DRY
-                return M.OSMTILE.unproject(M.OSMTILE.projection.bounds.max).lng;
-              }
-            }, 
-            latitude: {
-              name: "latitude",
-              get min() {
-                // TODO TODO should unproject bounds to be DRY
-                return M.OSMTILE.unproject(M.OSMTILE.projection.bounds.min).lat;
-              },
-              get max() {
-                // TODO TODO should unproject bounds to be DRY
-                return M.OSMTILE.unproject(M.OSMTILE.projection.bounds.max).lat;
-              }
-            }
-          },
-          map: {
-            i: {
-              name: "i"
-            },
-            j: {
-              name: "j"
-            }
-          },
-          tilematrix: {
-            column: {
-              name: "column",
-              min: 0, // for other tcrs might not be 0 e.g. CBMTILE
-              max: function (zoom) {
-                return M.OSMTILE.getProjectedBounds(zoom).max.x / 256;
-              }
-            },
-            row: {
-              name: "row",
-              min: 0,
-              max: function (zoom) {
-                return M.OSMTILE.getProjectedBounds(zoom).max.y / 256;
-              }
-            }
-          }
+    ],
+    crs: {
+      tcrs: {
+        horizontal: {
+          name: "x",
+          min: 0, 
+          max: zoom => (M.APSTILE.options.bounds.getSize().x / M.APSTILE.options.resolutions[zoom]).toFixed()
         },
-        resolutions: [
-          156543.0339,
-          78271.51695,
-          39135.758475,
-          19567.8792375,
-          9783.93961875,
-          4891.969809375,
-          2445.9849046875,
-          1222.9924523438,
-          611.49622617188,
-          305.74811308594,
-          152.87405654297,
-          76.437028271484,
-          38.218514135742,
-          19.109257067871,
-          9.5546285339355,
-          4.7773142669678,
-          2.3886571334839,
-          1.1943285667419,
-          0.59716428337097,
-          0.29858214168549,
-          0.14929107084274,
-          0.074645535421371,
-          0.03732276771068573,
-          0.018661383855342865,
-          0.009330691927671432495
-        ]
-      });
+        vertical: {
+          name: "y",
+          min:0, 
+          max: zoom => (M.APSTILE.options.bounds.getSize().y / M.APSTILE.options.resolutions[zoom]).toFixed()
+        },
+        bounds: zoom => L.bounds([M.APSTILE.options.crs.tcrs.horizontal.min,
+                          M.APSTILE.options.crs.tcrs.vertical.min],
+                         [M.APSTILE.options.crs.tcrs.horizontal.max(zoom),
+                          M.APSTILE.options.crs.tcrs.vertical.max(zoom)])
+      },
+      pcrs: {
+        horizontal: {
+          name: "easting",
+          get min() {return M.APSTILE.options.bounds.min.x;},
+          get max() {return M.APSTILE.options.bounds.max.x;}
+        }, 
+        vertical: {
+          name: "northing", 
+          get min() {return M.APSTILE.options.bounds.min.y;},
+          get max() {return M.APSTILE.options.bounds.max.y;}
+        },
+        get bounds() {return M.APSTILE.options.bounds;}
+      }, 
+      gcrs: {
+        horizontal: {
+          name: "longitude",
+          // set min/max axis values from EPSG registry area of use, retrieved 2019-07-25
+          min: -180.0,
+          max: 180.0
+        }, 
+        vertical: {
+          name: "latitude",
+          // set min/max axis values from EPSG registry area of use, retrieved 2019-07-25
+          min: 60.0,
+          max: 90.0
+        },
+        get bounds() {return L.latLngBounds(
+                  [M.APSTILE.options.crs.gcrs.vertical.min,M.APSTILE.options.crs.gcrs.horizontal.min],
+                  [M.APSTILE.options.crs.gcrs.vertical.max,M.APSTILE.options.crs.gcrs.horizontal.max]);}
+      },
+      map: {
+        horizontal: {
+          name: "i",
+          min: 0,
+          max: map => map.getSize().x
+        },
+        vertical: {
+          name: "j",
+          min: 0,
+          max: map => map.getSize().y
+        },
+        bounds: map => L.bounds(L.point([0,0]),map.getSize())
+      },
+      tile: {
+        horizontal: {
+          name: "i",
+          min: 0,
+          max: 256
+        },
+        vertical: {
+          name: "j",
+          min: 0,
+          max: 256
+        },
+        get bounds() {return L.bounds(
+                  [M.APSTILE.options.crs.tile.horizontal.min,M.APSTILE.options.crs.tile.vertical.min],
+                  [M.APSTILE.options.crs.tile.horizontal.max,M.APSTILE.options.crs.tile.vertical.max]);}
+      },
+      tilematrix: {
+        horizontal: {
+          name: "column",
+          min: 0,
+          max: zoom => (M.APSTILE.options.crs.tcrs.horizontal.max(zoom) / M.APSTILE.options.crs.tile.bounds.getSize().x).toFixed()
+        },
+        vertical: {
+          name: "row",
+          min: 0,
+          max: zoom => (M.APSTILE.options.crs.tcrs.vertical.max(zoom) / M.APSTILE.options.crs.tile.bounds.getSize().y).toFixed()
+        },
+        bounds: zoom => L.bounds([0,0],
+                 [M.APSTILE.options.crs.tilematrix.horizontal.max(zoom),
+                  M.APSTILE.options.crs.tilematrix.vertical.max(zoom)])
+      }
+    }
+  });
+  M.OSMTILE = L.CRS.EPSG3857;
+  L.setOptions(M.OSMTILE, {
+    origin: [-20037508.342787, 20037508.342787],
+    bounds: L.bounds([[-20037508.342787, -20037508.342787],[20037508.342787, 20037508.342787]]),
+    resolutions: [
+      156543.0339,
+      78271.51695,
+      39135.758475,
+      19567.8792375,
+      9783.93961875,
+      4891.969809375,
+      2445.9849046875,
+      1222.9924523438,
+      611.49622617188,
+      305.74811308594,
+      152.87405654297,
+      76.437028271484,
+      38.218514135742,
+      19.109257067871,
+      9.5546285339355,
+      4.7773142669678,
+      2.3886571334839,
+      1.1943285667419,
+      0.59716428337097,
+      0.29858214168549,
+      0.14929107084274,
+      0.074645535421371,
+      0.03732276771068573,
+      0.018661383855342865,
+      0.009330691927671432495
+    ],
+    crs: {
+      tcrs: {
+        horizontal: {
+          name: "x",
+          min: 0, 
+          max: zoom => (M.OSMTILE.options.bounds.getSize().x / M.OSMTILE.options.resolutions[zoom]).toFixed()
+        },
+        vertical: {
+          name: "y",
+          min:0, 
+          max: zoom => (M.OSMTILE.options.bounds.getSize().y / M.OSMTILE.options.resolutions[zoom]).toFixed()
+        },
+        bounds: zoom => L.bounds([M.OSMTILE.options.crs.tcrs.horizontal.min,
+                          M.OSMTILE.options.crs.tcrs.vertical.min],
+                         [M.OSMTILE.options.crs.tcrs.horizontal.max(zoom),
+                          M.OSMTILE.options.crs.tcrs.vertical.max(zoom)])
+      },
+      pcrs: {
+        horizontal: {
+          name: "easting",
+          get min() {return M.OSMTILE.options.bounds.min.x;},
+          get max() {return M.OSMTILE.options.bounds.max.x;}
+        }, 
+        vertical: {
+          name: "northing", 
+          get min() {return M.OSMTILE.options.bounds.min.y;},
+          get max() {return M.OSMTILE.options.bounds.max.y;}
+        },
+        get bounds() {return M.OSMTILE.options.bounds;}
+      }, 
+      gcrs: {
+        horizontal: {
+          name: "longitude",
+          get min() {return M.OSMTILE.unproject(M.OSMTILE.options.bounds.min).lng;},
+          get max() {return M.OSMTILE.unproject(M.OSMTILE.options.bounds.max).lng;}
+        }, 
+        vertical: {
+          name: "latitude",
+          get min() {return M.OSMTILE.unproject(M.OSMTILE.options.bounds.min).lat;},
+          get max() {return M.OSMTILE.unproject(M.OSMTILE.options.bounds.max).lat;}
+        },
+        get bounds() {return L.latLngBounds(
+              [M.OSMTILE.options.crs.gcrs.vertical.min,M.OSMTILE.options.crs.gcrs.horizontal.min],
+              [M.OSMTILE.options.crs.gcrs.vertical.max,M.OSMTILE.options.crs.gcrs.horizontal.max]);}
+      },
+      map: {
+        horizontal: {
+          name: "i",
+          min: 0,
+          max: map => map.getSize().x
+        },
+        vertical: {
+          name: "j",
+          min: 0,
+          max: map => map.getSize().y
+        },
+        bounds: map => L.bounds(L.point([0,0]),map.getSize())
+      },
+      tile: {
+        horizontal: {
+          name: "i",
+          min: 0,
+          max: 256
+        },
+        vertical: {
+          name: "j",
+          min: 0,
+          max: 256
+        },
+        get bounds() {return L.bounds(
+                  [M.OSMTILE.options.crs.tile.horizontal.min,M.OSMTILE.options.crs.tile.vertical.min],
+                  [M.OSMTILE.options.crs.tile.horizontal.max,M.OSMTILE.options.crs.tile.vertical.max]);}
+      },
+      tilematrix: {
+        horizontal: {
+          name: "column",
+          min: 0,
+          max: zoom => (M.OSMTILE.options.crs.tcrs.horizontal.max(zoom) / M.OSMTILE.options.crs.tile.bounds.getSize().x).toFixed()
+        },
+        vertical: {
+          name: "row",
+          min: 0,
+          max: zoom => (M.OSMTILE.options.crs.tcrs.vertical.max(zoom) / M.OSMTILE.options.crs.tile.bounds.getSize().y).toFixed()
+        },
+        bounds: zoom => L.bounds([0,0],
+                 [M.OSMTILE.options.crs.tilematrix.horizontal.max(zoom),
+                  M.OSMTILE.options.crs.tilematrix.vertical.max(zoom)])
+      }
+    }
+  });
 }());
-M.getBounds = function (extent) {
-      // TODO re-think the whole use of service bounds for disabling layers.
-      // bounds for the extent are used to 'disable' the layer in the layer control
-      // when the map extent does not intersect the calculated or default bounds 
-      // assigned to the layer or the map zoom does not fall in the zoom range
-      // of the service
-      var units = (extent.hasAttribute("units") && extent.getAttribute("units") !== "") ? extent.getAttribute("units").toUpperCase() : "OSMTILE",
-          crs = M[units],
-          // need to decide what to do when zoom doesn't exist/ is empty
-          zoom = extent.querySelector("input[type=zoom]") ? extent.querySelector("input[type=zoom]").getAttribute("value"): null;
-      if (!zoom) { console.log("No zoom found"); return; }
-      if (crs === undefined) { console.log("No matching TCRS found for: "+units); return; }
-      return crs.options.bounds;
-      
-      // for each pair of input[@type=location][@units][@axis is one of orthogonal-axes-corresponding-to-@units-cs] 
-      // x,easting,longitude,column
-      // y,northing,latitude,row
-
-//      var minXselector = 'input[type=location i][axis=x i][min],input[type=location i][axis=easting i][min],input[type=location i][axis=longitude i][min],input[type=location i][axis=column i][min]',
-//          minYselector = 'input[type=location i][axis=y i][min],input[type=location i][axis=northing i][min],input[type=location i][axis=latitude i][min],input[type=location i][axis=row i][min]',
-//          maxXselector = 'input[type=location i][axis=x i][max],input[type=location i][axis=easting i][max],input[type=location i][axis=longitude i][max],input[type=location i][axis=column i][max]',
-//          maxYselector = 'input[type=location i][axis=y i][max],input[type=location i][axis=northing i][max],input[type=location i][axis=latitude i][max],input[type=location i][axis=row i][max]';
-//
-//
-//
-//      var inputs = extent.querySelectorAll('minXselector');
-//      if (inputs) {
-//        for (var i=0;i<inputs.length;i++) {
-//          var axis = inputs[i].getAttribute("axis").toLowerCase(), yinputs;
-//          switch (axis) {
-//            case 'x':
-//              yinputs = extent.querySelectorAll('input[type=location i][axis=y i][min]');
-//              // use the minimum y value from yinputs@min >= crs.options.axes.tcrs.y.min as y value
-//              // use inputs[i]@min > crs.options.axes.tcrs.x.min ? inputs[i]@min : crs.options.axes.tcrs.x.min as x value
-//              // create a  L.point from the x,y above
-//              break;
-//            case 'easting':
-//              yinputs = extent.querySelectorAll('input[type=location i][axis=northing i][min]');
-//              // use the minimum y value from yinputs@min >= crs.options.axes.pcrs.northing.min as y value
-//              // use inputs[i]@min > crs.options.axes.pcrs.easting.min ? inputs[i]@min : crs.options.axes.pcrs.easting.min as x value
-//              // create a point from the easting, northing above
-//              // transform the pcrs to a tcrs point at the current zoom
-//              break;
-//            case 'longitude':
-//              yinputs = extent.querySelectorAll('input[type=location i][axis=latitude i][min]');
-//              // use the minimum y value from yinputs@min >= crs.options.axes.gcrs.latitude.min as y value
-//              // use inputs[i]@min > crs.options.axes.gcrs.longitude.min ? inputs[i]@min : crs.options.axes.gcrs.longitude.min as x value
-//              // create a point from the lat, long above
-//              // project to a pcrs point, if there is a pcrs (i.e. not a WGS84 extent)
-//              // 
-//            case 'column':
-//            default:
-//          }
-//        }
-//      }
-//      return L.bounds([[0,0],[0,0]]);
-};
 M.Util = {
   coordsToArray: function(containerPoints) {
     // returns an array of arrays of coordinate pairs coordsToArray("1,2,3,4") -> [[1,2],[3,4]]
@@ -432,48 +649,49 @@ M.QueryHandler = L.Handler.extend({
     _query(e, layer) {
       var obj = {},
           template = layer.getQueryTemplates()[0],
-          bounds = e.target.getPixelBounds(),
           zoom = e.target.getZoom(),
           map = this._map,
-          crs = map.options.crs,
+          crs = layer.crs,
           container = layer._container,
           popupOptions = {autoPan: true, maxHeight: (map.getSize().y * 0.5) - 50},
           tcrs2pcrs = function (c) {
             return crs.transformation.untransform(c,crs.scale(zoom));
           };
-          
-      var tcrsClickLoc = map.getPixelOrigin().add(e.layerPoint),
+      var tcrsClickLoc = crs.latLngToPoint(e.latlng, zoom),
           tileMatrixClickLoc = tcrsClickLoc.divideBy(256).floor(),
           tileBounds = new L.Bounds(tcrsClickLoc.divideBy(256).floor().multiplyBy(256), tcrsClickLoc.divideBy(256).ceil().multiplyBy(256));
   
       // all of the following are locations that might be used in a query, I think.
       obj[template.query.tilei] = tcrsClickLoc.x.toFixed() - (tileMatrixClickLoc.x * 256);
       obj[template.query.tilej] = tcrsClickLoc.y.toFixed() - (tileMatrixClickLoc.y * 256);
-      obj[template.query.mapi] = e.containerPoint.x.toFixed();
-      obj[template.query.mapj] = e.containerPoint.y.toFixed();
       
-      obj[template.query.pixelleft] = map.containerPointToLatLng(e.containerPoint).lng;
-      obj[template.query.pixeltop] = map.containerPointToLatLng(e.containerPoint).lat;
-      obj[template.query.pixelright] = map.containerPointToLatLng(e.containerPoint.add([1,1])).lng;
-      obj[template.query.pixelbottom] = map.containerPointToLatLng(e.containerPoint.add([1,1])).lat;
+      // this forces the click to the centre of the map extent in the layer crs
+      obj[template.query.mapi] = (map.getSize().divideBy(2)).x.toFixed();
+      obj[template.query.mapj] = (map.getSize().divideBy(2)).y.toFixed();
+      
+      obj[template.query.pixelleft] = crs.pointToLatLng(tcrsClickLoc, zoom).lng;
+      obj[template.query.pixeltop] = crs.pointToLatLng(tcrsClickLoc, zoom).lat;
+      obj[template.query.pixelright] = crs.pointToLatLng(tcrsClickLoc.add([1,1]), zoom).lng;
+      obj[template.query.pixelbottom] = crs.pointToLatLng(tcrsClickLoc.add([1,1]), zoom).lat;
       
       obj[template.query.column] = tileMatrixClickLoc.x;
       obj[template.query.row] = tileMatrixClickLoc.y;
-
+      obj[template.query.x] = tcrsClickLoc.x.toFixed();
+      obj[template.query.y] = tcrsClickLoc.y.toFixed();
+      
       // whereas the layerPoint is calculated relative to the origin plus / minus any
       // pan movements so is equal to containerPoint at first before any pans, but
       // changes as the map pans. 
-      obj[template.query.x] = tcrsClickLoc.x.toFixed();
-      obj[template.query.y] = tcrsClickLoc.y.toFixed();
-      obj[template.query.easting] =  tcrs2pcrs(map.getPixelOrigin().add(e.layerPoint)).x;
-      obj[template.query.northing] = tcrs2pcrs(map.getPixelOrigin().add(e.layerPoint)).y;
+      obj[template.query.easting] =  tcrs2pcrs(tcrsClickLoc).x;
+      obj[template.query.northing] = tcrs2pcrs(tcrsClickLoc).y;
       obj[template.query.zoom] = zoom;
       obj[template.query.width] = map.getSize().x;
       obj[template.query.height] = map.getSize().y;
-      obj[template.query.mapbottom] = tcrs2pcrs(bounds.max).y;
-      obj[template.query.mapleft] = tcrs2pcrs(bounds.min).x;
-      obj[template.query.maptop] = tcrs2pcrs(bounds.min).y;
-      obj[template.query.mapright] = tcrs2pcrs(bounds.max).x;
+      // assumes the click is at the centre of the map, per template.query.mapi, mapj above
+      obj[template.query.mapbottom] = tcrs2pcrs(tcrsClickLoc.add(map.getSize().divideBy(2))).y;
+      obj[template.query.mapleft] = tcrs2pcrs(tcrsClickLoc.subtract(map.getSize().divideBy(2))).x;
+      obj[template.query.maptop] = tcrs2pcrs(tcrsClickLoc.subtract(map.getSize().divideBy(2))).y;
+      obj[template.query.mapright] = tcrs2pcrs(tcrsClickLoc.add(map.getSize().divideBy(2))).x;
       
       obj[template.query.tilebottom] = tcrs2pcrs(tileBounds.max).y;
       obj[template.query.tileleft] = tcrs2pcrs(tileBounds.min).x;
@@ -506,7 +724,8 @@ M.QueryHandler = L.Handler.extend({
           });
       function handleMapMLResponse(response, loc) {
           return response.text().then(mapml => {
-              var _unproject = L.bind(map.options.crs.unproject, map.options.crs);
+              // bind the deprojection function of the layer's crs 
+              var _unproject = L.bind(crs.unproject, crs);
               function _coordsToLatLng(coords) {
                   return _unproject(L.point(coords));
               }
@@ -660,14 +879,13 @@ M.MapMLLayer = L.Layer.extend({
         map.addLayer(this._tileLayer);       
         this._tileLayer._container.appendChild(this._mapmlTileContainer);
         // if the extent has been initialized and received, update the map,
-        /* TODO establish the minZoom, maxZoom for the _tileLayer based on
-         * info received from mapml server. */
         if (this._extent) {
             if (this._templateVars) {
               this._templatedLayer = M.templatedLayer(this._templateVars, 
               { pane: this._container,
                 imagePath: M.detectImagePath(this._map.getContainer()),
-                _leafletLayer: this
+                _leafletLayer: this,
+                crs: this.crs
               }).addTo(map);
             }
         } else {
@@ -676,7 +894,8 @@ M.MapMLLayer = L.Layer.extend({
                   this._templatedLayer = M.templatedLayer(this._templateVars, 
                   { pane: this._container,
                     imagePath: M.detectImagePath(this._map.getContainer()),
-                    _leafletLayer: this
+                    _leafletLayer: this,
+                    crs: this.crs
                   }).addTo(map);
                 }
               }, this);
@@ -1050,8 +1269,8 @@ M.MapMLLayer = L.Layer.extend({
             if (this.readyState === this.DONE && mapml) {
                 var serverExtent = mapml.querySelector('extent'),
                     projectionMatch = serverExtent && serverExtent.hasAttribute('units') && 
-                    serverExtent.getAttribute('units').toUpperCase() === layer.options.projection,
-                    selectedAlternate = !projectionMatch && mapml.querySelector('head link[rel=alternate][projection='+layer.options.projection+']'),
+                    serverExtent.getAttribute('units').toUpperCase() === layer.options.mapprojection,
+                    selectedAlternate = !projectionMatch && mapml.querySelector('head link[rel=alternate][projection='+layer.options.mapprojection+']'),
                     base = (new URI(mapml.querySelector('base') ? mapml.querySelector('base').getAttribute('href') : null || this.responseURL)).resolve(new URI(this.responseURL));
                 
                 if (!serverExtent) {
@@ -1071,7 +1290,9 @@ M.MapMLLayer = L.Layer.extend({
                   layer._templateVars = [];
                   // set up the URL template and associated inputs (which yield variable values when processed)
                   var tlist = serverExtent.querySelectorAll('link[rel=tile],link[rel=image],link[rel=features],link[rel=query]'),
-                      varNamesRe = (new RegExp('(?:\{)(.*?)(?:\})','g'));
+                      varNamesRe = (new RegExp('(?:\{)(.*?)(?:\})','g')),
+                      zoomInput = serverExtent.querySelector('input[type="zoom" i]'),
+                      includesZoom = false;
                   for (var i=0;i< tlist.length;i++) {
                     var t = tlist[i],
                         template = t.getAttribute('tref'), v,
@@ -1084,6 +1305,7 @@ M.MapMLLayer = L.Layer.extend({
                       inp = serverExtent.querySelector('input[name='+varName+'],select[name='+varName+']');
                       if (inp) {
                         inputs.push(inp);
+                        includesZoom = inp.hasAttribute("type") && inp.getAttribute("type").toLowerCase() === "zoom";
                         if (inp.hasAttribute('shard')) {
                           var id = inp.getAttribute('list');
                           inp.servers = [];
@@ -1126,6 +1348,9 @@ M.MapMLLayer = L.Layer.extend({
                     if (template && vcount.length === inputs.length) {
                       if (ttype === 'query') {
                         layer.queryable = true;
+                      }
+                      if(!includesZoom && zoomInput) {
+                        inputs.push(zoomInput);
                       }
                       // template has a matching input for every variable reference {varref}
                       layer._templateVars.push({template:template, title:title, type: ttype, values: inputs});
@@ -1232,7 +1457,7 @@ M.MapMLLayer = L.Layer.extend({
               layer.error = true;
             };
             xhr.open("GET", url);
-            xhr.setRequestHeader("Accept",M.mime+";projection="+layer.options.projection+";zoom="+layer.zoom);
+            xhr.setRequestHeader("Accept",M.mime+";projection="+layer.options.mapprojection+";zoom="+layer.zoom);
             xhr.overrideMimeType("text/xml");
             xhr.send();
         }
@@ -1250,7 +1475,9 @@ M.MapMLLayer = L.Layer.extend({
                   layer._templateVars = [];
                   // set up the URL template and associated inputs (which yield variable values when processed)
                   var tlist = serverExtent.querySelectorAll('link[rel=tile],link[rel=image],link[rel=features],link[rel=query]'),
-                      varNamesRe = (new RegExp('(?:\{)(.*?)(?:\})','g'));
+                      varNamesRe = (new RegExp('(?:\{)(.*?)(?:\})','g')),
+                      zoomInput = serverExtent.querySelector('input[type="zoom" i]'),
+                      includesZoom = false;
                   for (i=0;i< tlist.length;i++) {
                     var t = tlist[i],
                         template = t.getAttribute('tref'), v,
@@ -1262,6 +1489,8 @@ M.MapMLLayer = L.Layer.extend({
                       inp = serverExtent.querySelector('input[name='+varName+']');
                       if (inp) {
                         inputs.push(inp);
+                        includesZoom = inp.hasAttribute("type") && inp.getAttribute("type").toLowerCase() === "zoom";
+
                       } else {
                         console.log('input with name='+varName+' not found for template variable of same name');
                         // no match found, template won't be used
@@ -1270,6 +1499,10 @@ M.MapMLLayer = L.Layer.extend({
                     }
                     if (template && vcount.length === inputs.length) {
                       // template has a matching input for every variable reference {varref}
+                      if(!includesZoom && zoomInput) {
+                        // except zoom 
+                        inputs.push(zoomInput);
+                      }
                       layer._templateVars.push({template:template, type: ttype, values: inputs});
                     }
                   }
@@ -1449,6 +1682,12 @@ M.MapMLLayer = L.Layer.extend({
             var zoom = serverExtent.querySelector('[type=zoom]');
             zoom.setAttribute('min',this._map.getMinZoom());
             zoom.setAttribute('max',this._map.getMaxZoom());
+        }
+        var lp = serverExtent.hasAttribute("units") ? serverExtent.getAttribute("units") : null;
+        if (lp && lp === "OSMTILE" || lp === "WGS84" || lp === "APSTILE" || lp === "CBMTILE") {
+          this.crs = M[lp];
+        } else {
+          this.crs = M.OSMTILE;
         }
     },
     _getMapMLExtent: function (bounds, zooms, proj) {
@@ -2373,7 +2612,14 @@ M.TemplatedTileLayer = L.TileLayer.extend({
     // with tiles for which it generates requests on demand (as the user pans/zooms/resizes
     // the map)
     initialize: function(template, options) {
-      L.setOptions(this, L.extend(options,this._setUpTileTemplateVars(template)));
+      // _setUpTileTemplateVars needs options.crs, not available unless we set
+      // options first...
+      L.setOptions(this, options);
+      this._setUpTileTemplateVars(template);
+      if (template.tile.subdomains) {
+        L.setOptions(this, L.extend(this.options, {subdomains: template.tile.subdomains}));
+      }
+      this._template = template;
       this._initContainer();
       // call the parent constructor with the template tref value, per the 
       // Leaflet tutorial: http://leafletjs.com/examples/extending/extending-1-classes.html#methods-of-the-parent-class
@@ -2397,18 +2643,22 @@ M.TemplatedTileLayer = L.TileLayer.extend({
       }
     },
     getTileUrl: function (coords) {
+        if (coords.z >= this._template.tilematrix.bounds.length || 
+                !this._template.tilematrix.bounds[coords.z].contains(coords)) {
+          return '';
+        }
         var obj = {};
-        obj[this.options.tile.col] = coords.x;
-        obj[this.options.tile.row] = coords.y;
-        obj[this.options.tile.zoom] = this._getZoomForUrl();
-        obj[this.options.tile.left] = this._tileMatrixToPCRSPosition(coords, 'top-left').x;
-        obj[this.options.tile.right] = this._tileMatrixToPCRSPosition(coords, 'top-right').x;
-        obj[this.options.tile.top] = this._tileMatrixToPCRSPosition(coords, 'top-left').y;
-        obj[this.options.tile.bottom] = this._tileMatrixToPCRSPosition(coords, 'bottom-left').y;
-        obj[this.options.tile.server] = this._getSubdomain(coords);
-        for (var v in this.options.tile) {
+        obj[this._template.tilematrix.col.name] = coords.x;
+        obj[this._template.tilematrix.row.name] = coords.y;
+        obj[this._template.zoom.name] = this._getZoomForUrl();
+        obj[this._template.pcrs.easting.left] = this._tileMatrixToPCRSPosition(coords, 'top-left').x;
+        obj[this._template.pcrs.easting.right] = this._tileMatrixToPCRSPosition(coords, 'top-right').x;
+        obj[this._template.pcrs.northing.top] = this._tileMatrixToPCRSPosition(coords, 'top-left').y;
+        obj[this._template.pcrs.northing.bottom] = this._tileMatrixToPCRSPosition(coords, 'bottom-left').y;
+        obj[this._template.tile.server] = this._getSubdomain(coords);
+        for (var v in this._template.tile) {
             if (["row","col","zoom","left","right","top","bottom"].indexOf(v) < 0) {
-                obj[v] = this.options.tile[v];
+                obj[v] = this._template.tile[v];
             }
         }
         obj.r = this.options.detectRetina && L.Browser.retina && this.options.maxZoom > 0 ? '@2x' : '';
@@ -2489,9 +2739,10 @@ M.TemplatedTileLayer = L.TileLayer.extend({
       //  right: 'rightvarname', 
       //  top: 'topvarname', 
       //  bottom: 'bottomvarname'}
-
-      var tileVarNames = {tile:{}},
-          inputs = template.values;
+      template.tile = {};
+      var inputs = template.values,
+          crs = this.options.crs.options,
+          zoom, east, north, row, col;
       
       for (var i=0;i<template.values.length;i++) {
         var type = inputs[i].getAttribute("type"), 
@@ -2500,60 +2751,185 @@ M.TemplatedTileLayer = L.TileLayer.extend({
             name = inputs[i].getAttribute("name"), 
             position = inputs[i].getAttribute("position"),
             shard = (type === "hidden" && inputs[i].hasAttribute("shard")),
-            select = (inputs[i].tagName.toLowerCase() === "select");
+            select = (inputs[i].tagName.toLowerCase() === "select"),
+            value = inputs[i].getAttribute("value"),
+            min = inputs[i].getAttribute("min"),
+            max = inputs[i].getAttribute("max");
         if (type === "location" && units === "tilematrix") {
           switch (axis) {
             case("column"):
-              tileVarNames.tile.col = name;
+              col = {
+                name: name,
+                min: crs.crs.tilematrix.horizontal.min,
+                max: crs.crs.tilematrix.horizontal.max(crs.resolutions.length-1)
+              };
+              if (!isNaN(Number.parseInt(min,10))) {
+                col.min = Number.parseInt(min,10);
+              }
+              if (!isNaN(Number.parseInt(max,10))) {
+                col.max = Number.parseInt(max,10);
+              }
               break;
             case("row"):
-              tileVarNames.tile.row = name;
+              row = {
+                name: name,
+                min: crs.crs.tilematrix.vertical.min,
+                max:  crs.crs.tilematrix.vertical.max(crs.resolutions.length-1)
+              };
+              if (!isNaN(Number.parseInt(min,10))) {
+                row.min = Number.parseInt(min,10);
+              }
+              if (!isNaN(Number.parseInt(max,10))) {
+                row.max = Number.parseInt(max,10);
+              }
               break;
             case('longitude'):
             case("easting"):
+              if (!east) {
+                east = {
+                  min: crs.crs.pcrs.horizontal.min,
+                  max: crs.crs.pcrs.horizontal.max
+                };
+              }
+              if (!isNaN(Number.parseFloat(min))) {
+                east.min = Number.parseFloat(min);
+              }
+              if (!isNaN(Number.parseFloat(max))) {
+                east.max = Number.parseFloat(max);
+              }
               if (position) {
                 if (position.match(/.*?-left/i)) {
-                  tileVarNames.tile.left = name;
+                  east.left = name;
                 } else if (position.match(/.*?-right/i)) {
-                  tileVarNames.tile.right = name;
+                  east.right = name;
                 }
-              } 
+              }
               break;
             case('latitude'):
             case("northing"):
+              if (!north) {
+                north = {
+                  min: crs.crs.pcrs.vertical.min,
+                  max: crs.crs.pcrs.vertical.max
+                };
+              }
+              if (!isNaN(Number.parseFloat(min))) {
+                north.min = Number.parseFloat(min);
+              }
+              if (!isNaN(Number.parseFloat(max))) {
+                north.max = Number.parseFloat(max);
+              }
               if (position) {
                 if (position.match(/top-.*?/i)) {
-                  tileVarNames.tile.top = name;
+                  north.top = name;
                 } else if (position.match(/bottom-.*?/i)) {
-                  tileVarNames.tile.bottom = name;
+                  north.bottom = name;
                 }
               } 
               break;
             default:
               // unsuportted axis value
           }
-        } else if (type === "zoom") {
+        } else if (type.toLowerCase() === "zoom") {
           //<input name="..." type="zoom" value="0" min="0" max="17"/>
-           tileVarNames.tile.zoom = name;
+           zoom = {
+             name: name,
+             min: 0, 
+             max: crs.resolutions.length
+           };
+           if (!isNaN(Number.parseInt(value,10)) && 
+                   Number.parseInt(value,10) >= zoom.min && 
+                   Number.parseInt(value,10) <= zoom.max) {
+             zoom.value = Number.parseInt(value,10);
+           }
+           if (!isNaN(Number.parseInt(min,10)) && 
+                   Number.parseInt(min,10) >= zoom.min && 
+                   Number.parseInt(min,10) <= zoom.max) {
+             zoom.min = Number.parseInt(min,10);
+           }
+           if (!isNaN(Number.parseInt(max,10)) && 
+                   Number.parseInt(max,10) >= zoom.min && 
+                   Number.parseInt(max,10) <= zoom.max) {
+             zoom.max = Number.parseInt(max,10);
+           }
+           template.zoom = zoom;
         } else if (shard) {
-          tileVarNames.tile.server = name;
-          tileVarNames.subdomains = inputs[i].servers.slice();
+          template.tile.server = name;
+          template.tile.subdomains = inputs[i].servers.slice();
         } else if (select) {
             /*jshint -W104 */
           const parsedselect = inputs[i].htmlselect;
-          tileVarNames.tile[name] = function() {
+          template.tile[name] = function() {
               return parsedselect.value;
           };
         } else {
            // needs to be a const otherwise it gets overwritten
           /*jshint -W104 */
           const input = inputs[i];
-          tileVarNames.tile[name] = function () {
+          template.tile[name] = function () {
               return input.getAttribute("value");
           };
         }
       }
-      return tileVarNames;
+      var transformation = this.options.crs.transformation, 
+          scale = L.bind(this.options.crs.scale, this.options.crs);
+      tilematrix2pcrs = function (c,zoom) {
+        return transformation.untransform(c.multiplyBy(256),scale(zoom));
+      };
+      pcrs2tilematrix = function(c,zoom) {
+        return transformation.transform(c, scale(zoom)).divideBy(256).floor();
+      };
+      if (east && north) {
+        
+        template.pcrs = {};
+        template.pcrs.bounds = L.bounds([east.min,north.min],[east.max,north.max]);
+        template.pcrs.easting = east;
+        template.pcrs.northing = north;
+        
+      } else if ( col && row && !isNaN(zoom.value)) {
+          
+          // convert the tile bounds at this zoom to a pcrs bounds, then 
+          // go through the zoom min/max and create a tile-based bounds
+          // at each zoom that applies to the col/row values that constrain what tiles
+          // will be requested so that we don't generate too many 404s
+          if (!template.pcrs) {
+            template.pcrs = {};
+            template.pcrs.easting = '';
+            template.pcrs.northing = '';
+          }
+          
+          template.pcrs.bounds = L.bounds(
+            tilematrix2pcrs(L.point([col.min,row.min]),zoom.value),
+            tilematrix2pcrs(L.point([col.max,row.max]),zoom.value)
+          );
+          
+          template.tilematrix = {};
+          template.tilematrix.col = col;
+          template.tilematrix.row = row;
+
+      } else {
+        console.log('Unable to determine bounds for tile template: ' + template.template);
+      }
+      
+      if (!template.tilematrix) {
+        template.tilematrix = {};
+        template.tilematrix.col = {};
+        template.tilematrix.row = {};
+      }
+      template.tilematrix.bounds = [];
+      var pcrsBounds = template.pcrs.bounds;
+      // the template should _always_ have a zoom, because we force it to
+      // by first processing the extent to determine the zoom and if none, adding
+      // one and second by copying that zoom into the set of template variable inputs
+      // even if it is not referenced by one of the template's variable references
+      var zmin = template.zoom?template.zoom.min:0,
+          zmax = template.zoom?template.zoom.max:crs.resolutions.length;
+      for (var z=0; z <= zmax; z++) {
+        template.tilematrix.bounds[z] = (z >= zmin ?
+            L.bounds(pcrs2tilematrix(pcrsBounds.min,z),
+              pcrs2tilematrix(pcrsBounds.max,z)) :
+                      L.bounds(L.point([-1,-1]),L.point([-1,-1])));
+      }
     }
 });
 M.templatedTileLayer = function(template, options) {
