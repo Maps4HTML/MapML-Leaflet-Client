@@ -558,63 +558,6 @@ window.M = M;
     }
   });
 }());
-M.getBounds = function (extent) {
-      // TODO re-think the whole use of service bounds for disabling layers.
-      // bounds for the extent are used to 'disable' the layer in the layer control
-      // when the map extent does not intersect the calculated or default bounds 
-      // assigned to the layer or the map zoom does not fall in the zoom range
-      // of the service
-      var units = (extent.hasAttribute("units") && extent.getAttribute("units") !== "") ? extent.getAttribute("units").toUpperCase() : "OSMTILE",
-          crs = M[units],
-          // need to decide what to do when zoom doesn't exist/ is empty
-          zoom = extent.querySelector("input[type=zoom]") ? extent.querySelector("input[type=zoom]").getAttribute("value"): null;
-      if (!zoom) { console.log("No zoom found"); return; }
-      if (crs === undefined) { console.log("No matching TCRS found for: "+units); return; }
-      return crs.options.bounds;
-      
-      // for each pair of input[@type=location][@units][@axis is one of orthogonal-axes-corresponding-to-@units-cs] 
-      // x,easting,longitude,column
-      // y,northing,latitude,row
-
-//      var minXselector = 'input[type=location i][axis=x i][min],input[type=location i][axis=easting i][min],input[type=location i][axis=longitude i][min],input[type=location i][axis=column i][min]',
-//          minYselector = 'input[type=location i][axis=y i][min],input[type=location i][axis=northing i][min],input[type=location i][axis=latitude i][min],input[type=location i][axis=row i][min]',
-//          maxXselector = 'input[type=location i][axis=x i][max],input[type=location i][axis=easting i][max],input[type=location i][axis=longitude i][max],input[type=location i][axis=column i][max]',
-//          maxYselector = 'input[type=location i][axis=y i][max],input[type=location i][axis=northing i][max],input[type=location i][axis=latitude i][max],input[type=location i][axis=row i][max]';
-//
-//
-//
-//      var inputs = extent.querySelectorAll('minXselector');
-//      if (inputs) {
-//        for (var i=0;i<inputs.length;i++) {
-//          var axis = inputs[i].getAttribute("axis").toLowerCase(), yinputs;
-//          switch (axis) {
-//            case 'x':
-//              yinputs = extent.querySelectorAll('input[type=location i][axis=y i][min]');
-//              // use the minimum y value from yinputs@min >= crs.options.axes.tcrs.y.min as y value
-//              // use inputs[i]@min > crs.options.axes.tcrs.x.min ? inputs[i]@min : crs.options.axes.tcrs.x.min as x value
-//              // create a  L.point from the x,y above
-//              break;
-//            case 'easting':
-//              yinputs = extent.querySelectorAll('input[type=location i][axis=northing i][min]');
-//              // use the minimum y value from yinputs@min >= crs.options.axes.pcrs.northing.min as y value
-//              // use inputs[i]@min > crs.options.axes.pcrs.easting.min ? inputs[i]@min : crs.options.axes.pcrs.easting.min as x value
-//              // create a point from the easting, northing above
-//              // transform the pcrs to a tcrs point at the current zoom
-//              break;
-//            case 'longitude':
-//              yinputs = extent.querySelectorAll('input[type=location i][axis=latitude i][min]');
-//              // use the minimum y value from yinputs@min >= crs.options.axes.gcrs.latitude.min as y value
-//              // use inputs[i]@min > crs.options.axes.gcrs.longitude.min ? inputs[i]@min : crs.options.axes.gcrs.longitude.min as x value
-//              // create a point from the lat, long above
-//              // project to a pcrs point, if there is a pcrs (i.e. not a WGS84 extent)
-//              // 
-//            case 'column':
-//            default:
-//          }
-//        }
-//      }
-//      return L.bounds([[0,0],[0,0]]);
-};
 M.Util = {
   coordsToArray: function(containerPoints) {
     // returns an array of arrays of coordinate pairs coordsToArray("1,2,3,4") -> [[1,2],[3,4]]
@@ -1308,7 +1251,7 @@ M.MapMLLayer = L.Layer.extend({
                   // set up the URL template and associated inputs (which yield variable values when processed)
                   var tlist = serverExtent.querySelectorAll('link[rel=tile],link[rel=image],link[rel=features],link[rel=query]'),
                       varNamesRe = (new RegExp('(?:\{)(.*?)(?:\})','g')),
-                      zoom = serverExtent.querySelector('input[type="zoom" i]'),
+                      zoomInput = serverExtent.querySelector('input[type="zoom" i]'),
                       includesZoom = false;
                   for (var i=0;i< tlist.length;i++) {
                     var t = tlist[i],
@@ -1366,8 +1309,8 @@ M.MapMLLayer = L.Layer.extend({
                       if (ttype === 'query') {
                         layer.queryable = true;
                       }
-                      if(!includesZoom && zoom) {
-                        inputs.push(zoom);
+                      if(!includesZoom && zoomInput) {
+                        inputs.push(zoomInput);
                       }
                       // template has a matching input for every variable reference {varref}
                       layer._templateVars.push({template:template, title:title, type: ttype, values: inputs});
@@ -1493,7 +1436,7 @@ M.MapMLLayer = L.Layer.extend({
                   // set up the URL template and associated inputs (which yield variable values when processed)
                   var tlist = serverExtent.querySelectorAll('link[rel=tile],link[rel=image],link[rel=features],link[rel=query]'),
                       varNamesRe = (new RegExp('(?:\{)(.*?)(?:\})','g')),
-                      zoom = serverExtent.querySelector('input[type="zoom" i]'),
+                      zoomInput = serverExtent.querySelector('input[type="zoom" i]'),
                       includesZoom = false;
                   for (i=0;i< tlist.length;i++) {
                     var t = tlist[i],
@@ -1516,9 +1459,9 @@ M.MapMLLayer = L.Layer.extend({
                     }
                     if (template && vcount.length === inputs.length) {
                       // template has a matching input for every variable reference {varref}
-                      if(!includesZoom && zoom) {
+                      if(!includesZoom && zoomInput) {
                         // except zoom 
-                        inputs.push(zoom);
+                        inputs.push(zoomInput);
                       }
                       layer._templateVars.push({template:template, type: ttype, values: inputs});
                     }
