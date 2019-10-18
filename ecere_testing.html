@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+   <head>
+     <title>Web Map Template - default style</title>
+     <meta charset="utf-8" />
+     <script src="bower_components/webcomponentsjs/webcomponents-lite.min.js"></script>
+     <link rel="import" href="bower_components/web-map/web-map.html">
+     <style>
+* {margin: 0;padding: 0;}
+map { height: 100vh;}
+</style>
+   </head>
+   <body>
+<map is="web-map" projection="WGS84" zoom="2" lat="35" lon="-90" controls="" width="1903" height="937" style="width: 1903px; height: 937px;">
+
+          <layer- label="Satellite image" src="http://localhost:8080/geoserver/mapml/nurc:Img_Sample/wgs84/" checked></layer-> 
+          <layer- label="Country collection" src="http://maps.ecere.com/geoapi/collections/NaturalEarth/cultural/ne_10m_urban_areas/?f=mapml" checked></layer->
+<!--          <layer- label="Features"  checked>
+            <extent units="WGS84">
+              <input name="zoomLevel" type="zoom" value="7" min="0" max="15">
+              <input name="minLon" type="location" value="35.1110898" units="gcrs" axis="longitude" position="top-left" min="35.1110898" max="48.9245849">
+              <input name="minLat" type="location" value="29.9228363" units="gcrs" axis="latitude" position="bottom-right" min="29.9228363" max="37.4005063">
+              <input name="maxLon" type="location" value="48.9245849" units="gcrs" axis="longitude" position="bottom-right" min="35.1110898" max="48.9245849">
+              <input name="maxLat" type="location" value="37.4005063" units="gcrs" axis="latitude" position="top-left" min="29.9228363" max="37.4005063">
+              <link rel='features' tref='http://maps.ecere.com/geoapi/collections/vtp/Consolidated_data/OSM/gis_osm_waterways_free_1/items.mapml?zoomLevel={zoomLevel}&amp;clipbox={minLon},{minLat},{maxLon},{maxLat}'>
+            </extent>          
+          </layer->-->
+</map>     
+   </body>
+</html>

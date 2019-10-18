@@ -1258,7 +1258,8 @@ M.MapMLLayer = L.Layer.extend({
                         template = t.getAttribute('tref'), v,
                         title = t.hasAttribute('title') ? t.getAttribute('title') : 'Query this layer',
                         vcount=template.match(varNamesRe),
-                        ttype = (!t.hasAttribute('rel') || t.getAttribute('rel').toLowerCase() === 'tile') ? 'tile' : t.getAttribute('rel').toLowerCase(),
+                        trel = (!t.hasAttribute('rel') || t.getAttribute('rel').toLowerCase() === 'tile') ? 'tile' : t.getAttribute('rel').toLowerCase(),
+                        ttype = (!t.hasAttribute('type')? 'image/*':t.getAttribute('type').toLowerCase()),
                         inputs = [];
                     while ((v = varNamesRe.exec(template)) !== null) {
                       var varName = v[1],
@@ -1306,14 +1307,14 @@ M.MapMLLayer = L.Layer.extend({
                       }
                     }
                     if (template && vcount.length === inputs.length) {
-                      if (ttype === 'query') {
+                      if (trel === 'query') {
                         layer.queryable = true;
                       }
                       if(!includesZoom && zoomInput) {
                         inputs.push(zoomInput);
                       }
                       // template has a matching input for every variable reference {varref}
-                      layer._templateVars.push({template:template, title:title, type: ttype, values: inputs});
+                      layer._templateVars.push({template:template, title:title, rel: trel, type: ttype, values: inputs});
                     }
                   }
                 }
@@ -1442,7 +1443,8 @@ M.MapMLLayer = L.Layer.extend({
                     var t = tlist[i],
                         template = t.getAttribute('tref'), v,
                         vcount=template.match(varNamesRe),
-                        ttype = (!t.hasAttribute('rel') || t.getAttribute('rel').toLowerCase() === 'tile') ? 'tile' : t.getAttribute('rel').toLowerCase(),
+                        trel = (!t.hasAttribute('rel') || t.getAttribute('rel').toLowerCase() === 'tile') ? 'tile' : t.getAttribute('rel').toLowerCase(),
+                        ttype = (!t.hasAttribute('type')? 'image/*':t.getAttribute('type').toLowerCase()),
                         inputs = [];
                     while ((v = varNamesRe.exec(template)) !== null) {
                       var varName = v[1],
@@ -1463,7 +1465,7 @@ M.MapMLLayer = L.Layer.extend({
                         // except zoom 
                         inputs.push(zoomInput);
                       }
-                      layer._templateVars.push({template:template, type: ttype, values: inputs});
+                      layer._templateVars.push({template:template, rel: trel, type: ttype, values: inputs});
                     }
                   }
                 }
@@ -2340,14 +2342,14 @@ M.TemplatedLayer = L.Layer.extend({
     L.DomUtil.addClass(this._container,'mapml-templatedlayer-container');
 
     for (var i=0;i<templates.length;i++) {
-      if (templates[i].type === 'tile') {
+      if (templates[i].rel === 'tile') {
           this._templates[i].layer = M.templatedTileLayer(templates[i], 
             L.Util.extend(options, {errorTileUrl: "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==", zIndex: i, pane: this._container}));
-      } else if (templates[i].type === 'image') {
+      } else if (templates[i].rel === 'image') {
           this._templates[i].layer = M.templatedImageLayer(templates[i], L.Util.extend(options, {zIndex: i, pane: this._container}));
-      } else if (templates[i].type === 'features') {
+      } else if (templates[i].rel === 'features') {
           this._templates[i].layer = M.templatedFeaturesLayer(templates[i], L.Util.extend(options, {zIndex: i, pane: this._container}));
-      } else if (templates[i].type === 'query') {
+      } else if (templates[i].rel === 'query') {
           // add template to array of queryies to be added to map and processed
           // on click/tap events
           if (!this._queries) {
@@ -2365,7 +2367,7 @@ M.TemplatedLayer = L.Layer.extend({
   redraw: function() {
     this.closePopup();
     for (var i=0;i<this._templates.length;i++) {
-      if (this._templates[i].type === 'tile' || this._templates[i].type === 'image' || this._templates[i].type === 'features') {
+      if (this._templates[i].rel === 'tile' || this._templates[i].rel === 'image' || this._templates[i].rel === 'features') {
           this._templates[i].layer.redraw();
       }
     }
@@ -2507,14 +2509,14 @@ M.TemplatedLayer = L.Layer.extend({
 
     this._templates = templates;
     for (var i=0;i<templates.length;i++) {
-      if (templates[i].type === 'tile') {
+      if (templates[i].rel === 'tile') {
           this._templates[i].layer = M.templatedTileLayer(templates[i],
             L.Util.extend(this.options, {errorTileUrl: "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==", zIndex: i, pane: this._container}));
-      } else if (templates[i].type === 'image') {
+      } else if (templates[i].rel === 'image') {
           this._templates[i].layer = M.templatedImageLayer(templates[i], L.Util.extend(this.options, {zIndex: i, pane: this._container}));
-      } else if (templates[i].type === 'features') {
+      } else if (templates[i].rel === 'features') {
           this._templates[i].layer = M.templatedFeaturesLayer(templates[i], L.Util.extend(this.options, {zIndex: i, pane: this._container}));
-      } else if (templates[i].type === 'query') {
+      } else if (templates[i].rel === 'query') {
           if (!this._queries) {
             this._queries = [];
           }
@@ -2532,7 +2534,7 @@ M.TemplatedLayer = L.Layer.extend({
   },
   onAdd: function (map) {
     for (var i=0;i<this._templates.length;i++) {
-      if (this._templates[i].type !== 'query') {
+      if (this._templates[i].rel !== 'query') {
         map.addLayer(this._templates[i].layer);
       }
     }
@@ -2551,7 +2553,7 @@ M.TemplatedLayer = L.Layer.extend({
   onRemove: function (map) {
     L.DomUtil.remove(this._container);
     for (var i=0;i<this._templates.length;i++) {
-      if (this._templates[i].type !== 'query') {
+      if (this._templates[i].rel !== 'query') {
         map.removeLayer(this._templates[i].layer);
       }
     }
@@ -2585,11 +2587,189 @@ M.TemplatedTileLayer = L.TileLayer.extend({
       // Leaflet tutorial: http://leafletjs.com/examples/extending/extending-1-classes.html#methods-of-the-parent-class
       L.TileLayer.prototype.initialize.call(this, template.template, L.extend(options, {pane: this._container}));
     },
+    createTile: function (coords) {
+      if (this._template.type.startsWith('image/')) {
+        return L.TileLayer.prototype.createTile.call(this, coords, function(){});
+      } else {
+        // tiles of type="text/mapml" will have to fetch content while creating
+        // the tile here, unless there can be a callback associated to the element
+        // that will render the content in the alread-placed tile
+        var tile = L.DomUtil.create('canvas', 'leaflet-tile');
+        tile.setAttribute("width", "256");
+        tile.setAttribute("height", "256");
+        tile.style.outline="1px solid red";
+        this._fetchTile(coords, tile);
+      }
+      return tile;
+    },
+    _mapmlTileReady: function(tile) {
+        L.DomUtil.addClass(tile,'leaflet-tile-loaded');
+    },
     // instead of being child of a pane, the TemplatedTileLayers are 'owned' by the group,
     // and so are DOM children of the group, not the pane element (the MapMLLayer is
     // a child of the overlay pane and always has a set of sub-layers)
     getPane: function() {
       return this.options.pane;
+    },
+    _renderTileGeometry: function(mapml, coords, tile) {
+      if (tile.getContext) {
+        var ctx = tile.getContext('2d');
+        ctx.font = '24px serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('MapML is AWESOME', 125, 125);
+//        ctx.fillRect(25, 25, 100, 100);
+//        ctx.clearRect(45, 45, 60, 60);
+//        ctx.strokeRect(50, 50, 50, 50);
+        var features = mapml.querySelectorAll('feature');
+        for (var i=0; i< features.length; i++) {
+          this._draw(features[i], coords, ctx);
+        }
+        this._mapmlTileReady(tile);
+      }
+    },
+  	 _draw: function (feature, tileCoords, context) {
+      var geometry = feature.tagName.toUpperCase() === 'FEATURE' ? feature.getElementsByTagName('geometry')[0] : feature,
+          latlng, pt, points, latlngs, coordinates, member, members;
+
+      switch (geometry.firstElementChild.tagName.toUpperCase()) {
+        case 'POINT':
+          coordinates = [];
+          geometry.getElementsByTagName('coordinates')[0].textContent.split(/\s+/gim).forEach(parseNumber,coordinates);
+          //pt = pcrs2tile(this.coordsToPoint(coordinates),coords);
+          pt = this.coordsToPoint(coordinates, tileCoords);
+          // draw a circle for now
+          context.beginPath();
+          context.arc(pt.x, pt.y, 2, 0, Math.PI * 2, false);
+          context.fill();
+          break;
+        case 'MULTIPOINT':
+          coordinates = [];
+          geometry.getElementsByTagName('coordinates')[0].textContent.match(/(\S+ \S+)/gim).forEach(splitCoordinate, coordinates);
+          members = this.coordsToPoints(coordinates, 0, tileCoords);
+          for(member=0;member<members.length;member++) {
+            // draw a circle for now
+            context.beginPath();
+            context.arc(members[member].x, members[member].y, 2, 0, Math.PI * 2, false);
+            context.fill();
+          }
+          break;
+        case 'LINESTRING':
+          coordinates = [];
+          geometry.getElementsByTagName('coordinates')[0].textContent.match(/(\S+ \S+)/gim).forEach(splitCoordinate, coordinates);
+          renderLinestring(this.coordsToPoints(coordinates, 0, tileCoords));
+          break;
+        case 'MULTILINESTRING':
+          members = geometry.getElementsByTagName('coordinates');
+          for (member=0;member<members.length;member++) {
+            coordinates = [];
+            members[member].textContent.match(/(\S+ \S+)/gim).forEach(splitCoordinate, coordinates);
+            renderLinestring(this.coordsToPoints(coordinates, 0, tileCoords));
+          }
+          break;
+        case 'POLYGON':
+          var rings = geometry.getElementsByTagName('coordinates');
+          renderPolygon(this.coordsToPoints(coordinatesToArray(rings), 1, tileCoords));
+          break;
+        case 'MULTIPOLYGON':
+          members = geometry.getElementsByTagName('polygon');
+          for (member=0;member<members.length;member++) {
+            renderPolygon(
+              this.coordsToPoints(coordinatesToArray(
+              members[member].querySelectorAll('coordinates')), 1 ,tileCoords)
+            );
+          }
+          break;
+        case 'GEOMETRYCOLLECTION':
+          console.log('GEOMETRYCOLLECTION Not implemented yet');
+          break;
+        default:
+          console.log('Invalid geometry');
+          break;
+      }
+      function renderPolygon(p) {
+        context.beginPath();
+        for(var ring=0;ring<p.length;ring++) {
+          context.moveTo(p[ring][0].x, p[ring][0].y);
+          for (var pt=1;pt<p[ring].length;pt++) {
+            context.lineTo(p[ring][pt].x, p[ring][pt].y);
+          }
+          context.closePath();
+        }
+        context.fill();
+      }
+      function renderLinestring(l) {
+        // draw a path
+        context.beginPath();
+        context.moveTo(l[0].x, l[0].y);
+        for(var c=1;c<l.length;c++) {
+          context.lineTo(l[c].x, l[c].y);
+        }
+        context.stroke();
+      }
+      function coordinatesToArray(coordinates) {
+        var a = new Array(coordinates.length);
+        for (var i=0;i<a.length;i++) {
+          a[i]=[];
+          (coordinates[i] || coordinates).textContent.match(/(\S+\s+\S+)/gim).forEach(splitCoordinate, a[i]);
+        }
+        return a;
+      }
+
+      function splitCoordinate(element, index, array) {
+        var a = [];
+        element.split(/\s+/gim).forEach(parseNumber,a);
+        this.push(a);
+      }
+
+      function parseNumber(element, index, array) {
+        this.push(parseFloat(element));
+      }
+      function gcrs2tile(latLng, tile) {
+        // project to pcrs
+        // return pcrs2tile(pcrs, tile)
+      }
+    },
+    coordsToLatLng: function (coords) { // (Array[, Boolean]) -> LatLng
+     return new L.LatLng(coords[1], coords[0], coords[2]);
+    },
+    pcrs2tile: function (coords,tile) {
+      var crs = this.options.crs;
+      // look up the scale factor from the layer's crs for the tile.z
+      // transform to tcrs at tile.z
+      // subtract the tcrs origin from tile.x,tile.y
+      var tcrsCoords = crs.transformation.transform(coords,crs.scale(tile.z)),
+          tilePoint = L.point(tcrsCoords.x - (tile.x*256), tcrsCoords.y - (tile.y*256));
+
+      return tilePoint;
+    },
+// coords is a location in x,y coordinate order, parsed from the <coordinates> element
+    coordsToPoint: function (coords, tileCoords) {
+      // pcrs2tile is hard-coded, for now
+      return this.pcrs2tile(L.point(coords[0],coords[1]), tileCoords);
+    },
+    coordsToPoints: function (coords, levelsDeep, tileCoords) {
+      var point, i, len, points = [];
+      for (i = 0, len = coords.length; i < len; i++) {
+       point = levelsDeep ?
+               this.coordsToPoints(coords[i], levelsDeep - 1, tileCoords) :
+               this.coordsToPoint(coords[i], tileCoords);
+       points.push(point);
+      }
+      return points;
+    },
+    coordsToLatLngs: function (coords, levelsDeep, coordsToLatLng) { // (Array[, Number, Function]) -> Array
+      var latlng, i, len,
+          latlngs = [];
+
+      for (i = 0, len = coords.length; i < len; i++) {
+       latlng = levelsDeep ?
+               this.coordsToLatLngs(coords[i], levelsDeep - 1, coordsToLatLng) :
+               (coordsToLatLng || this.coordsToLatLng)(coords[i]);
+
+       latlngs.push(latlng);
+      }
+
+      return latlngs;
     },
     _initContainer: function () {
       if (this._container) { return; }
@@ -2600,6 +2780,41 @@ M.TemplatedTileLayer = L.TileLayer.extend({
 
       if (this.options.opacity < 1) {
         this._updateOpacity();
+      }
+    },
+    _fetchTile:  function (coords, tile) {
+       fetch(this.getTileUrl(coords),{redirect: 'follow'}).then(
+          function(response) {
+            if (response.status >= 200 && response.status < 300) {
+              return Promise.resolve(response);
+            } else {
+              console.log('Looks like there was a problem. Status Code: ' + response.status);
+              return Promise.reject(response);
+            }
+          }).then(function(response) {
+            var contenttype = response.headers.get("Content-Type");
+            if ( contenttype.startsWith("text/mapml")) {
+              return handleMapMLResponse(response, tile);
+            } else {
+              return handleOtherResponse(response, tile);
+            }
+          }).then(mapml => {
+            this._renderTileGeometry(mapml, coords, tile);
+          }).catch(function(err) {});
+      function handleMapMLResponse(response, tile) {
+          return response.text().then(mapml => {
+              var parser = new DOMParser();
+                  return parser.parseFromString(mapml, "application/xml");
+          });
+      }
+      function handleOtherResponse(response, tile) {
+          return response.text().then(text => {
+              var c = document.createElement('iframe');
+              c.csp = "script-src 'none'";
+              c.style = "border: none";
+              c.srcdoc = text;
+              tile.appendChild(c);
+          });
       }
     },
     getTileUrl: function (coords) {
@@ -2795,13 +3010,9 @@ M.TemplatedTileLayer = L.TileLayer.extend({
            zoom = {
              name: name,
              min: 0, 
-             max: crs.resolutions.length
+             max: crs.resolutions.length,
+             value: crs.resolutions.length 
            };
-           if (!isNaN(Number.parseInt(value,10)) && 
-                   Number.parseInt(value,10) >= zoom.min && 
-                   Number.parseInt(value,10) <= zoom.max) {
-             zoom.value = Number.parseInt(value,10);
-           }
            if (!isNaN(Number.parseInt(min,10)) && 
                    Number.parseInt(min,10) >= zoom.min && 
                    Number.parseInt(min,10) <= zoom.max) {
@@ -2811,6 +3022,13 @@ M.TemplatedTileLayer = L.TileLayer.extend({
                    Number.parseInt(max,10) >= zoom.min && 
                    Number.parseInt(max,10) <= zoom.max) {
              zoom.max = Number.parseInt(max,10);
+           }
+           if (!isNaN(Number.parseInt(value,10)) && 
+                   Number.parseInt(value,10) >= zoom.min && 
+                   Number.parseInt(value,10) <= zoom.max) {
+             zoom.value = Number.parseInt(value,10);
+           } else {
+             zoom.value = zoom.max;
            }
            template.zoom = zoom;
         } else if (shard) {
