@@ -2594,10 +2594,12 @@ M.TemplatedTileLayer = L.TileLayer.extend({
         // tiles of type="text/mapml" will have to fetch content while creating
         // the tile here, unless there can be a callback associated to the element
         // that will render the content in the alread-placed tile
-        var tile = L.DomUtil.create('canvas', 'leaflet-tile');
+        // var tile = L.DomUtil.create('canvas', 'leaflet-tile');
+        var tile = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
         tile.setAttribute("width", "256");
         tile.setAttribute("height", "256");
-        tile.style.outline="1px solid red";
+//        tile.style.outline="1px solid red";
+        L.DomUtil.addClass(tile, "leaflet-tile");
         this._fetchTile(coords, tile);
       }
       return tile;
@@ -2611,25 +2613,24 @@ M.TemplatedTileLayer = L.TileLayer.extend({
     getPane: function() {
       return this.options.pane;
     },
-    _renderTileGeometry: function(mapml, coords, tile) {
-      if (tile.getContext) {
-        var ctx = tile.getContext('2d');
-        ctx.font = '24px serif';
-        ctx.textAlign = 'center';
-        ctx.fillText('MapML is AWESOME', 125, 125);
-//        ctx.fillRect(25, 25, 100, 100);
-//        ctx.clearRect(45, 45, 60, 60);
-//        ctx.strokeRect(50, 50, 50, 50);
+    _drawTile: function(mapml, coords, tile) {
         var features = mapml.querySelectorAll('feature');
         for (var i=0; i< features.length; i++) {
-          this._draw(features[i], coords, ctx);
+          this._draw(features[i], coords, tile);
         }
         this._mapmlTileReady(tile);
-      }
     },
-  	 _draw: function (feature, tileCoords, context) {
+  	 _draw: function (feature, tileCoords, tile) {
       var geometry = feature.tagName.toUpperCase() === 'FEATURE' ? feature.getElementsByTagName('geometry')[0] : feature,
-          latlng, pt, points, latlngs, coordinates, member, members;
+          latlng, pt, points, latlngs, coordinates, member, members, svg = !tile.getContext;
+        
+      if (!svg) {
+        var context = tile.getContext('2d');
+//        context.font = '24px serif';
+//        context.textAlign = 'center';
+//        context.fillText('MapML is AWESOME', 125, 125);
+      }
+
 
       switch (geometry.firstElementChild.tagName.toUpperCase()) {
         case 'POINT':
@@ -2637,20 +2638,14 @@ M.TemplatedTileLayer = L.TileLayer.extend({
           geometry.getElementsByTagName('coordinates')[0].textContent.split(/\s+/gim).forEach(parseNumber,coordinates);
           //pt = pcrs2tile(this.coordsToPoint(coordinates),coords);
           pt = this.coordsToPoint(coordinates, tileCoords);
-          // draw a circle for now
-          context.beginPath();
-          context.arc(pt.x, pt.y, 2, 0, Math.PI * 2, false);
-          context.fill();
+          renderPoint(pt);
           break;
         case 'MULTIPOINT':
           coordinates = [];
           geometry.getElementsByTagName('coordinates')[0].textContent.match(/(\S+ \S+)/gim).forEach(splitCoordinate, coordinates);
           members = this.coordsToPoints(coordinates, 0, tileCoords);
           for(member=0;member<members.length;member++) {
-            // draw a circle for now
-            context.beginPath();
-            context.arc(members[member].x, members[member].y, 2, 0, Math.PI * 2, false);
-            context.fill();
+            renderPoint(members[member]);
           }
           break;
         case 'LINESTRING':
@@ -2687,24 +2682,68 @@ M.TemplatedTileLayer = L.TileLayer.extend({
           break;
       }
       function renderPolygon(p) {
-        context.beginPath();
-        for(var ring=0;ring<p.length;ring++) {
-          context.moveTo(p[ring][0].x, p[ring][0].y);
-          for (var pt=1;pt<p[ring].length;pt++) {
-            context.lineTo(p[ring][pt].x, p[ring][pt].y);
+        if (svg) {
+          var poly = document.createElementNS('http://www.w3.org/2000/svg', 'path'),
+              path = "";
+          for(var ring=0;ring<p.length;ring++) {
+            path = path + "M " + Math.round(p[ring][0].x) + "," + Math.round(p[ring][0].y) + " ";
+            for (var pt=1;pt<p[ring].length;pt++) {
+              path = path + Math.round(p[ring][pt].x) + "," + Math.round(p[ring][pt].y) + " ";
+            }
           }
-          context.closePath();
+          poly.setAttribute("d", path);
+          poly.setAttribute("fill", "cyan");
+          poly.setAttribute("stroke", "lightcyan");
+          tile.appendChild(poly);
+        } else {
+          context.beginPath();
+          for(var ring=0;ring<p.length;ring++) {
+            context.moveTo(p[ring][0].x, p[ring][0].y);
+            for (var pt=1;pt<p[ring].length;pt++) {
+              context.lineTo(p[ring][pt].x, p[ring][pt].y);
+            }
+            context.closePath();
+          }
+          context.fill();
         }
-        context.fill();
       }
       function renderLinestring(l) {
-        // draw a path
-        context.beginPath();
-        context.moveTo(l[0].x, l[0].y);
-        for(var c=1;c<l.length;c++) {
-          context.lineTo(l[c].x, l[c].y);
+        if (svg) {
+          var line = document.createElementNS('http://www.w3.org/2000/svg', 'path'),
+              path = "";
+         path =  path + "M " + Math.round(l[0].x) + "," + Math.round(l[0].y) + " ";
+          for(var c=1;c<l.length;c++) {
+            path =  path + Math.round(l[c].x) + "," + Math.round(l[c].y) + " ";
+          }
+          line.setAttribute("d", path);
+          line.setAttribute("stroke", "darkcyan");
+          line.setAttribute("fill", "none");
+          tile.appendChild(line);
+        } else {
+          // draw a path
+          context.beginPath();
+          context.moveTo(l[0].x, l[0].y);
+          for(var c=1;c<l.length;c++) {
+            context.lineTo(l[c].x, l[c].y);
+          }
+          context.stroke();
         }
-        context.stroke();
+      }
+      function renderPoint(p) {
+        if (svg) {
+          var point = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+          point.setAttribute("cx", Math.round(p.x));
+          point.setAttribute("cy", Math.round(p.y));
+          point.setAttribute("r", "5");
+          point.setAttribute("fill", "blue");
+          point.setAttribute("stroke", "yellow");
+          tile.appendChild(point);
+        } else {
+          // draw a circle for now
+          context.beginPath();
+          context.arc(p.x, p.y, 2, 0, Math.PI * 2, false);
+          context.fill();
+        }
       }
       function coordinatesToArray(coordinates) {
         var a = new Array(coordinates.length);
@@ -2799,7 +2838,7 @@ M.TemplatedTileLayer = L.TileLayer.extend({
               return handleOtherResponse(response, tile);
             }
           }).then(mapml => {
-            this._renderTileGeometry(mapml, coords, tile);
+            this._drawTile(mapml, coords, tile);
           }).catch(function(err) {});
       function handleMapMLResponse(response, tile) {
           return response.text().then(mapml => {

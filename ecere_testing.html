@@ -13,8 +13,14 @@ map { height: 100vh;}
    <body>
 <map is="web-map" projection="WGS84" zoom="2" lat="35" lon="-90" controls="" width="1903" height="937" style="width: 1903px; height: 937px;">
 
-          <layer- label="Satellite image" src="http://localhost:8080/geoserver/mapml/nurc:Img_Sample/wgs84/" checked></layer-> 
-          <layer- label="Country collection" src="http://maps.ecere.com/geoapi/collections/NaturalEarth/cultural/ne_10m_urban_areas/?f=mapml" checked></layer->
+          <layer- label="Blue Marble NG" src="http://maps.ecere.com/geoapi/collections/BMNG%202004/?f=mapml" checked></layer->
+          <layer- label="Countries" src="http://maps.ecere.com/geoapi/collections/NaturalEarth/cultural/ne_10m_admin_0_countries/?f=mapml" checked></layer->
+          <layer- label="Lakes" src="http://maps.ecere.com/geoapi/collections/NaturalEarth/physical/ne_10m_lakes/?f=mapml" checked></layer->
+          <layer- label="Rivers" src="http://maps.ecere.com/geoapi/collections/NaturalEarth/physical/ne_10m_rivers_lake_centerlines/?f=mapml" checked></layer->
+          <layer- label="Ocean Labels" src="http://maps.ecere.com/geoapi/collections/NaturalEarth/physical/ne_10m_land_ocean_label_points/?f=mapml" checked></layer->
+          <layer- label="Pacific groupings" src="http://maps.ecere.com/geoapi/collections/NaturalEarth/cultural/ne_10m_admin_0_pacific_groupings/?f=mapml" checked></layer->
+          <layer- label="RH_S" src="http://maps.ecere.com/geoapi/collections/GRHQ/RH_S/?f=mapml" checked></layer->
+
 <!--          <layer- label="Features"  checked>
             <extent units="WGS84">
               <input name="zoomLevel" type="zoom" value="7" min="0" max="15">
