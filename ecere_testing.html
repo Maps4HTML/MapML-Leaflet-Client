@@ -8,18 +8,42 @@
      <style>
 * {margin: 0;padding: 0;}
 map { height: 100vh;}
+svg.style-scope.web-map path.fclass._133 { fill: lightcyan; stroke: cyan}
+svg.style-scope.web-map path._5 { fill: green; }
+svg.style-scope.web-map path._24 { fill: blue; }
+svg.style-scope.web-map path._18 { fill: yellow; }
+svg.style-scope.web-map path._2 { fill: white; }
+svg.style-scope.web-map path.fclass { fill: yellow; }
 </style>
    </head>
    <body>
 <map is="web-map" projection="WGS84" zoom="2" lat="35" lon="-90" controls="" width="1903" height="937" style="width: 1903px; height: 937px;">
 
           <layer- label="Blue Marble NG" src="http://maps.ecere.com/geoapi/collections/BMNG%202004/?f=mapml" checked></layer->
-          <layer- label="Countries" src="http://maps.ecere.com/geoapi/collections/NaturalEarth/cultural/ne_10m_admin_0_countries/?f=mapml" checked></layer->
-          <layer- label="Lakes" src="http://maps.ecere.com/geoapi/collections/NaturalEarth/physical/ne_10m_lakes/?f=mapml" checked></layer->
-          <layer- label="Rivers" src="http://maps.ecere.com/geoapi/collections/NaturalEarth/physical/ne_10m_rivers_lake_centerlines/?f=mapml" checked></layer->
-          <layer- label="Ocean Labels" src="http://maps.ecere.com/geoapi/collections/NaturalEarth/physical/ne_10m_land_ocean_label_points/?f=mapml" checked></layer->
+<!--<layer- label="Countries" checked>
+<extent units="WGS84">
+         <input name="zoomLevel" type="zoom" min="0" max="6"/>
+         <input name="lon" type="location" units="gcrs" axis="longitude" />
+         <input name="lat" type="location" units="gcrs" axis="latitude" />
+         <input rel="pixel" name="maxLon" type="location" units="gcrs" axis="longitude" position="bottom-right" min="-180" max="180"/>
+         <input rel="pixel" name="maxLat" type="location" units="gcrs" axis="latitude" position="top-left" min="-90" max="90.0002058236639"/>
+
+         <input name="row" type="location" axis="row" units="tilematrix"/>
+         <input name="col" type="location" axis="column" units="tilematrix"/>
+
+         Tiles
+         <link rel='tile' type='text/mapml' title='Tiles for ne_10m_admin_0_countries (as MapML)' tref='http://maps.ecere.com/geoapi/collections/NaturalEarth/cultural/ne_10m_admin_0_countries/tiles/CRS84Quad2L0Tiles/{zoomLevel}/{row}/{col}.mapml'/>
+
+         <link rel='query' type='text/mapml' title='ne_10m_admin_0_countries (as MapML)' tref='http://maps.ecere.com/geoapi/collections/NaturalEarth/cultural/ne_10m_admin_0_countries/items.mapml?tilingScheme=CRS84Quad2L0Tiles&amp;zoomLevel={zoomLevel}&amp;bbox={lon},{lat},{lon},{lat}'/>
+      </extent>
+</layer->-->
+          
+<!--          <layer- label="Ottawa roads" src="http://maps.ecere.com/geoapi/collections/osm/ottawa/roads?f=mapml" checked></layer->-->
+<layer- label="Lakes" src="http://maps.ecere.com/geoapi/collections/NaturalEarth/physical/ne_10m_lakes/?f=mapml" checked></layer->
+        <!--   <layer- label="Rivers" src="http://maps.ecere.com/geoapi/collections/NaturalEarth/physical/ne_10m_rivers_lake_centerlines/?f=mapml" checked></layer->-->
+<!--          <layer- label="Ocean Labels" src="http://maps.ecere.com/geoapi/collections/NaturalEarth/physical/ne_10m_land_ocean_label_points/?f=mapml" checked></layer->
           <layer- label="Pacific groupings" src="http://maps.ecere.com/geoapi/collections/NaturalEarth/cultural/ne_10m_admin_0_pacific_groupings/?f=mapml" checked></layer->
-          <layer- label="RH_S" src="http://maps.ecere.com/geoapi/collections/GRHQ/RH_S/?f=mapml" checked></layer->
+          <layer- label="RH_S" src="http://maps.ecere.com/geoapi/collections/GRHQ/RH_S/?f=mapml" checked></layer->-->
 
 <!--          <layer- label="Features"  checked>
             <extent units="WGS84">
@@ -28,7 +52,7 @@ map { height: 100vh;}
               <input name="minLat" type="location" value="29.9228363" units="gcrs" axis="latitude" position="bottom-right" min="29.9228363" max="37.4005063">
               <input name="maxLon" type="location" value="48.9245849" units="gcrs" axis="longitude" position="bottom-right" min="35.1110898" max="48.9245849">
               <input name="maxLat" type="location" value="37.4005063" units="gcrs" axis="latitude" position="top-left" min="29.9228363" max="37.4005063">
-              <link rel='features' tref='http://maps.ecere.com/geoapi/collections/vtp/Consolidated_data/OSM/gis_osm_waterways_free_1/items.mapml?zoomLevel={zoomLevel}&amp;clipbox={minLon},{minLat},{maxLon},{maxLat}'>
+              <link rel='features' tref='http://maps.ecere.com/geoapi/collections/vtp/Consolidated_data/OSM/gis_osm_waterways_free_1/items.mapml?zoomLevel={zoomLevel}&clipbox={minLon},{minLat},{maxLon},{maxLat}'>
             </extent>          
           </layer->-->
 </map>     

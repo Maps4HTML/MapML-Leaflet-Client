@@ -616,6 +616,9 @@ M.QueryHandler = L.Handler.extend({
           popupOptions = {autoPan: true, maxHeight: (map.getSize().y * 0.5) - 50},
           tcrs2pcrs = function (c) {
             return crs.transformation.untransform(c,crs.scale(zoom));
+          },
+          tcrs2gcrs = function (c) {
+            return crs.unproject(crs.transformation.untransform(c,crs.scale(zoom)),zoom);
           };
       var tcrsClickLoc = crs.latLngToPoint(e.latlng, zoom),
           tileMatrixClickLoc = tcrsClickLoc.divideBy(256).floor(),
@@ -644,6 +647,8 @@ M.QueryHandler = L.Handler.extend({
       // changes as the map pans. 
       obj[template.query.easting] =  tcrs2pcrs(tcrsClickLoc).x;
       obj[template.query.northing] = tcrs2pcrs(tcrsClickLoc).y;
+      obj[template.query.longitude] =  tcrs2gcrs(tcrsClickLoc).lng;
+      obj[template.query.latitude] = tcrs2gcrs(tcrsClickLoc).lat;
       obj[template.query.zoom] = zoom;
       obj[template.query.width] = map.getSize().x;
       obj[template.query.height] = map.getSize().y;
@@ -660,7 +665,7 @@ M.QueryHandler = L.Handler.extend({
       // add hidden or other variables that may be present into the values to
       // be processed by L.Util.template below.
       for (var v in template.query) {
-          if (["mapi","mapj","tilei","tilej","row","col","x","y","easting","northing","width","height","zoom","mapleft","mapright",",maptop","mapbottom","tileleft","tileright","tiletop","tilebottom","pixeltop","pixelbottom","pixelleft","pixelright"].indexOf(v) < 0) {
+          if (["mapi","mapj","tilei","tilej","row","col","x","y","easting","northing","longitude","latitude","width","height","zoom","mapleft","mapright",",maptop","mapbottom","tileleft","tileright","tiletop","tilebottom","pixeltop","pixelbottom","pixelleft","pixelright"].indexOf(v) < 0) {
               obj[v] = template.query[v];
           }
       }
@@ -2622,55 +2627,56 @@ M.TemplatedTileLayer = L.TileLayer.extend({
     },
   	 _draw: function (feature, tileCoords, tile) {
       var geometry = feature.tagName.toUpperCase() === 'FEATURE' ? feature.getElementsByTagName('geometry')[0] : feature,
-          latlng, pt, points, latlngs, coordinates, member, members, svg = !tile.getContext;
+          pt, coordinates, member, members, svg = !tile.getContext, crs = this.options.crs;
         
       if (!svg) {
         var context = tile.getContext('2d');
-//        context.font = '24px serif';
-//        context.textAlign = 'center';
-//        context.fillText('MapML is AWESOME', 125, 125);
       }
 
-
+      // because we are creating SVG shapes as proxies for <feature> geometries,
+      // we have to establish a convention for where the author can set up classes
+      // that are to be copied onto the proxy elements.  Going with <coordinates>
+      // at this time.  In the case of multiple <coordinates> per geometry, we
+      // will look for class attribute on the first <coordinates> element.
+      // var cl; // classList -> DOMTokenList https://developer.mozilla.org/en-US/docs/Web/API/DOMTokenList
       switch (geometry.firstElementChild.tagName.toUpperCase()) {
         case 'POINT':
           coordinates = [];
           geometry.getElementsByTagName('coordinates')[0].textContent.split(/\s+/gim).forEach(parseNumber,coordinates);
-          //pt = pcrs2tile(this.coordsToPoint(coordinates),coords);
           pt = this.coordsToPoint(coordinates, tileCoords);
-          renderPoint(pt);
+          renderPoint(pt, feature);
           break;
         case 'MULTIPOINT':
           coordinates = [];
           geometry.getElementsByTagName('coordinates')[0].textContent.match(/(\S+ \S+)/gim).forEach(splitCoordinate, coordinates);
           members = this.coordsToPoints(coordinates, 0, tileCoords);
           for(member=0;member<members.length;member++) {
-            renderPoint(members[member]);
+            renderPoint(members[member], feature);
           }
           break;
         case 'LINESTRING':
           coordinates = [];
           geometry.getElementsByTagName('coordinates')[0].textContent.match(/(\S+ \S+)/gim).forEach(splitCoordinate, coordinates);
-          renderLinestring(this.coordsToPoints(coordinates, 0, tileCoords));
+          renderLinestring(this.coordsToPoints(coordinates, 0, tileCoords), feature);
           break;
         case 'MULTILINESTRING':
           members = geometry.getElementsByTagName('coordinates');
           for (member=0;member<members.length;member++) {
             coordinates = [];
             members[member].textContent.match(/(\S+ \S+)/gim).forEach(splitCoordinate, coordinates);
-            renderLinestring(this.coordsToPoints(coordinates, 0, tileCoords));
+            renderLinestring(this.coordsToPoints(coordinates, 0, tileCoords), feature);
           }
           break;
         case 'POLYGON':
           var rings = geometry.getElementsByTagName('coordinates');
-          renderPolygon(this.coordsToPoints(coordinatesToArray(rings), 1, tileCoords));
+          renderPolygon(this.coordsToPoints(coordinatesToArray(rings), 1, tileCoords), feature);
           break;
         case 'MULTIPOLYGON':
           members = geometry.getElementsByTagName('polygon');
           for (member=0;member<members.length;member++) {
             renderPolygon(
               this.coordsToPoints(coordinatesToArray(
-              members[member].querySelectorAll('coordinates')), 1 ,tileCoords)
+              members[member].getElementsByTagName('coordinates')), 1 ,tileCoords), feature
             );
           }
           break;
@@ -2681,7 +2687,7 @@ M.TemplatedTileLayer = L.TileLayer.extend({
           console.log('Invalid geometry');
           break;
       }
-      function renderPolygon(p) {
+      function renderPolygon(p, f) {
         if (svg) {
           var poly = document.createElementNS('http://www.w3.org/2000/svg', 'path'),
               path = "";
@@ -2692,9 +2698,32 @@ M.TemplatedTileLayer = L.TileLayer.extend({
             }
           }
           poly.setAttribute("d", path);
-          poly.setAttribute("fill", "cyan");
-          poly.setAttribute("stroke", "lightcyan");
+          
+          // remove this logic once we get geometry-specific classes in dev stream
+          // the following is a hack specific to the countries layer in development
+          f.classList.add("_"+ f.id.substring(f.id.indexOf(".")+1));
+
+          // copy the classes from the feature to its proxy svg path
+          f.classList.forEach(val => poly.classList.add(val));
+          poly.style.display = "none";
           tile.appendChild(poly);
+          // if the outline of the polygon is to be drawn, need to see if it
+          // is composed of differently styled segments, and if so, create
+          // individual segments with appropriate classes (copied from the
+          // input <span class="">nnn nnnn...nnnN nnnN</span> segments.
+          if (window.getComputedStyle(poly).stroke !== "none") {
+            var g = f.getElementsByTagName('geometry')[0];
+            if (g.querySelector('coordinates span')) {
+              // recursively parse the coordinates element (c) for path segments
+              // and create them as individual path elements with corresponding 
+              // class list values copied from the input <span> or parent 
+              // <coordinates>
+              // stroke the polygon's outline as is...
+              //poly.style.stroke = "none";
+              _renderParts(g.querySelectorAll('coordinates'));
+            }
+          }
+          poly.style.display = ""; // fill it
         } else {
           context.beginPath();
           for(var ring=0;ring<p.length;ring++) {
@@ -2707,18 +2736,79 @@ M.TemplatedTileLayer = L.TileLayer.extend({
           context.fill();
         }
       }
-      function renderLinestring(l) {
-        if (svg) {
-          var line = document.createElementNS('http://www.w3.org/2000/svg', 'path'),
-              path = "";
-         path =  path + "M " + Math.round(l[0].x) + "," + Math.round(l[0].y) + " ";
-          for(var c=1;c<l.length;c++) {
-            path =  path + Math.round(l[c].x) + "," + Math.round(l[c].y) + " ";
+      function _renderParts(c) {
+        for (var i=0;i<c.length;i++) {
+          _coordinatesToPath(document.createTreeWalker(c[i]));
+        }
+      }
+      function _coordinatesToPath(tw, pt, startOrEnd ) {
+        var n = tw.currentNode;
+        var start, end;
+        if (pt) {
+          if (startOrEnd === 's') {
+            start = "M " + pt.x + "," + pt.y + " ";
+          } else {
+            end = " " + pt.x + "," + pt.y;
           }
-          line.setAttribute("d", path);
-          line.setAttribute("stroke", "darkcyan");
-          line.setAttribute("fill", "none");
-          tile.appendChild(line);
+        }
+        
+        if (n.nodeType === Node.TEXT_NODE ) {
+            var cary = coordsToPoints(coordinatesToArray([n]), tileCoords);
+            var line = document.createElementNS('http://www.w3.org/2000/svg', 'path'),
+                path = start ? start : "M ";
+            for(var c=0;c<cary.length;c++) {
+              path +=  Math.round(cary[c].x) + "," + Math.round(cary[c].y) + " ";
+            }
+            if (end) {
+              path += end;
+            }
+            line.setAttribute("d", path);
+            n.parentNode.classList.forEach(val => line.classList.add(val));
+            tile.appendChild(line);
+        }
+        for (var child=tw.firstChild();child;child=tw.nextSibling()) {
+          // TODO ADD pt, 's' | 'e' parameters set appropriately
+           _coordinatesToPath(tw);
+        }
+        
+        tw.currentNode = n;
+        //nodeEndActions(tw);
+      }
+      function startOrEndPath(twNode) {
+        var cn = twNode.currentNode;
+        if (twNode.currentNode.nodeName === 'coordinates') return;
+        if (twNode.currentNode.nodeName === '#text') {
+          if (twNode.currentNode.nextSibling().nodeName === 'span') {
+            // parse the first coordinate out of it
+            var point; // parse the first coordinate out of the text child of span, if possible 
+            // return {'end', point}
+          }
+        } else if (twNode.currentNode.nodeName === 'span') {
+            
+        } else return;
+        
+      }
+      function renderLinestring(l, f) {
+        if (svg) {
+          if (f.querySelector('coordinates span')) {
+            // recursively parse the coordinates element (c) for path segments
+            // and create them as individual path elements with corresponding 
+            // class list value
+          } else { // create a single path element, draw it
+            var line = document.createElementNS('http://www.w3.org/2000/svg', 'path'),
+                path = "";
+             path =  path + "M " + Math.round(l[0].x) + "," + Math.round(l[0].y) + " ";
+            for(var c=1;c<l.length;c++) {
+              path =  path + Math.round(l[c].x) + "," + Math.round(l[c].y) + " ";
+            }
+            line.setAttribute("d", path);
+            // remove this logic once we get geometry-specific classes in dev stream
+            // the following is a hack specific to the countries layer in development
+            f.classList.add("_"+ f.id.substring(f.id.indexOf(".")+1));
+            
+            f.classList.forEach(val => line.classList.add(val));
+            tile.appendChild(line);
+          }
         } else {
           // draw a path
           context.beginPath();
@@ -2729,14 +2819,18 @@ M.TemplatedTileLayer = L.TileLayer.extend({
           context.stroke();
         }
       }
-      function renderPoint(p) {
+      function renderPoint(p, f) {
         if (svg) {
           var point = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
           point.setAttribute("cx", Math.round(p.x));
           point.setAttribute("cy", Math.round(p.y));
           point.setAttribute("r", "5");
-          point.setAttribute("fill", "blue");
-          point.setAttribute("stroke", "yellow");
+          // remove this logic once we get geometry-specific classes in dev stream
+          // the following is a hack specific to the countries layer in development
+          f.classList.add("_"+ f.id.substring(f.id.indexOf(".")+1));
+
+          f.forEach(val => point.classList.add(val));
+          point.style.display = "none";
           tile.appendChild(point);
         } else {
           // draw a circle for now
@@ -2753,7 +2847,28 @@ M.TemplatedTileLayer = L.TileLayer.extend({
         }
         return a;
       }
+      function coordsToPoints(coords, tileCoords) {
+        var point, i, len, points = [];
+        for (i = 0, len = coords.length; i < len; i++) {
+         point = coordsToPoint(coords[i], tileCoords);
+         points.push(point);
+        }
+        return points;
+      }
+      // coords is a location in x,y coordinate order, parsed from the <coordinates> element
+      function coordsToPoint(coords, tileCoords) {
+        // pcrs2tile is hard-coded, for now
+        return pcrs2tile(L.point(coords[0],coords[1]), tileCoords);
+      }
+      function pcrs2tile(coords,tile) {
+        // look up the scale factor from the layer's crs for the tile.z
+        // transform to tcrs at tile.z
+        // subtract the tcrs origin from tile.x,tile.y
+        var tcrsCoords = crs.transformation.transform(coords,crs.scale(tile.z)),
+            tilePoint = L.point(tcrsCoords.x - (tile.x*256), tcrsCoords.y - (tile.y*256));
 
+        return tilePoint;
+      }
       function splitCoordinate(element, index, array) {
         var a = [];
         element.split(/\s+/gim).forEach(parseNumber,a);
@@ -2762,10 +2877,6 @@ M.TemplatedTileLayer = L.TileLayer.extend({
 
       function parseNumber(element, index, array) {
         this.push(parseFloat(element));
-      }
-      function gcrs2tile(latLng, tile) {
-        // project to pcrs
-        // return pcrs2tile(pcrs, tile)
       }
     },
     coordsToLatLng: function (coords) { // (Array[, Boolean]) -> LatLng
@@ -2838,7 +2949,8 @@ M.TemplatedTileLayer = L.TileLayer.extend({
               return handleOtherResponse(response, tile);
             }
           }).then(mapml => {
-            this._drawTile(mapml, coords, tile);
+            var drawTile = this._drawTile.bind(this);
+            drawTile(mapml, coords, tile);
           }).catch(function(err) {});
       function handleMapMLResponse(response, tile) {
           return response.text().then(mapml => {
