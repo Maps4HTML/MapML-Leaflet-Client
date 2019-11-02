@@ -2719,8 +2719,8 @@ M.TemplatedTileLayer = L.TileLayer.extend({
               // class list values copied from the input <span> or parent 
               // <coordinates>
               // stroke the polygon's outline as is...
-              //poly.style.stroke = "none";
-              _renderParts(g.querySelectorAll('coordinates'));
+               poly.style.stroke = "none";
+              _renderParts(g.querySelectorAll('coordinates'),f.classList);
             }
           }
           poly.style.display = ""; // fill it
@@ -2736,57 +2736,83 @@ M.TemplatedTileLayer = L.TileLayer.extend({
           context.fill();
         }
       }
-      function _renderParts(c) {
+      function _renderParts(c, classList) {
         for (var i=0;i<c.length;i++) {
-          _coordinatesToPath(document.createTreeWalker(c[i]));
+          _coordinatesToPaths(
+              document.createTreeWalker(c[i],
+                NodeFilter.SHOW_ELEMENT+NodeFilter.SHOW_TEXT,
+                {
+                  acceptNode: function(node) {
+                    if (node.nodeType === Node.ELEMENT_NODE) return NodeFilter.FILTER_ACCEPT;
+                    if (node.nodeType === Node.TEXT_NODE && 
+                        node.textContent.match(/(\S+ \S+)/gim))return NodeFilter.FILTER_ACCEPT;
+                    return NodeFilter.FILTER_REJECT;
+                  }
+                })
+          ,classList);
         }
       }
-      function _coordinatesToPath(tw, pt, startOrEnd ) {
-        var n = tw.currentNode;
-        var start, end;
-        if (pt) {
-          if (startOrEnd === 's') {
-            start = "M " + pt.x + "," + pt.y + " ";
+      function _coordinatesToPaths(tw,cl) {
+        var coordinatesAsArrays = [];
+        
+        // make an array of each coordinates text node, regardless of parentage,
+        // so that we can easily redistribute the beginning and ending 
+        // coordinate pairs as required (see below).
+        for (var n=tw.currentNode;n;n=tw.nextNode()) {
+          if (n.nodeType === Node.TEXT_NODE ) {
+            coordinatesAsArrays.push(coordinatesToArray([n])[0]);
           } else {
-            end = " " + pt.x + "," + pt.y;
+            // copy the class list from the feature to this boundary segment
+            cl.forEach(val => n.classList.add(val));
           }
         }
-        
-        if (n.nodeType === Node.TEXT_NODE ) {
-            var cary = coordsToPoints(coordinatesToArray([n]), tileCoords);
-            var line = document.createElementNS('http://www.w3.org/2000/svg', 'path'),
-                path = start ? start : "M ";
-            for(var c=0;c<cary.length;c++) {
-              path +=  Math.round(cary[c].x) + "," + Math.round(cary[c].y) + " ";
+        // reset
+        tw.currentNode = tw.root;
+        for (var n=tw.currentNode,i=0;n;n=tw.nextNode()) {
+          var cn=tw.currentNode;
+          if (n.nodeType === Node.TEXT_NODE ) {
+            
+            // logic to modify the coordinate array for this node, based on 
+            // preceding/following and parentNode 
+            // these methods modify the state of the treewalker, so we need
+            // to keep track of the node and reset so our loop will work
+            var parentNode = tw.parentNode();
+            tw.currentNode = cn;
+            var nextNode = tw.nextNode();
+            tw.currentNode = cn;
+            var previousSibling = tw.previousSibling();
+            tw.currentNode = cn;
+            
+            
+            if (parentNode && parentNode.nodeName === 'coordinates') {
+              if (previousSibling && previousSibling.nodeName === 'span') {
+                // copy the last element of the previous coordinates array into 
+                // the current coordinates array at the beginning of the current
+                // coordinates array
+                var last = coordinatesAsArrays[i-1].length - 1;
+                coordinatesAsArrays[i].unshift(coordinatesAsArrays[i-1][last]);
+              }
+              // copy the first element of the next coordinates array into the
+              // current coordinates array at the last position of the current
+              // coordinates array
+              if (nextNode && nextNode.nodeName === 'span') {
+                coordinatesAsArrays[i].push(coordinatesAsArrays[i+1][0]);
+              }
             }
-            if (end) {
-              path += end;
+            
+            var points = coordsToPoints(coordinatesAsArrays[i], tileCoords);
+            var line = document.createElementNS('http://www.w3.org/2000/svg', 'path'),
+                path = "M ";
+            for(var c=0;c<points.length;c++) {
+              path +=  Math.round(points[c].x) + "," + Math.round(points[c].y) + " ";
             }
             line.setAttribute("d", path);
-            n.parentNode.classList.forEach(val => line.classList.add(val));
+            parentNode.classList.forEach(val => line.classList.add(val));
+            line.classList.add('pen');
             tile.appendChild(line);
-        }
-        for (var child=tw.firstChild();child;child=tw.nextSibling()) {
-          // TODO ADD pt, 's' | 'e' parameters set appropriately
-           _coordinatesToPath(tw);
-        }
-        
-        tw.currentNode = n;
-        //nodeEndActions(tw);
-      }
-      function startOrEndPath(twNode) {
-        var cn = twNode.currentNode;
-        if (twNode.currentNode.nodeName === 'coordinates') return;
-        if (twNode.currentNode.nodeName === '#text') {
-          if (twNode.currentNode.nextSibling().nodeName === 'span') {
-            // parse the first coordinate out of it
-            var point; // parse the first coordinate out of the text child of span, if possible 
-            // return {'end', point}
+            i++;
           }
-        } else if (twNode.currentNode.nodeName === 'span') {
-            
-        } else return;
-        
+        }
       }
       function renderLinestring(l, f) {
         if (svg) {
@@ -2851,6 +2877,14 @@ M.TemplatedTileLayer = L.TileLayer.extend({
         var point, i, len, points = [];
         for (i = 0, len = coords.length; i < len; i++) {
          point = coordsToPoint(coords[i], tileCoords);
+         points.push(point);
+        }
+        return points;
+      }
+      function coordsToPointsDBG(coords, tileCoords) {
+        var point, i, points = [];
+        for (i = 0; i < coords.length; i++) {
+         point = L.point(coords[i][0],coords[i][1]);
          points.push(point);
         }
         return points;
@@ -2949,8 +2983,7 @@ M.TemplatedTileLayer = L.TileLayer.extend({
               return handleOtherResponse(response, tile);
             }
           }).then(mapml => {
-            var drawTile = this._drawTile.bind(this);
-            drawTile(mapml, coords, tile);
+            this._drawTile(mapml, coords, tile);
           }).catch(function(err) {});
       function handleMapMLResponse(response, tile) {
           return response.text().then(mapml => {
