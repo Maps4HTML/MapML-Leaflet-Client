@@ -2720,7 +2720,8 @@ M.TemplatedTileLayer = L.TileLayer.extend({
               // <coordinates>
               // stroke the polygon's outline as is...
                poly.style.stroke = "none";
-              _renderParts(g.querySelectorAll('coordinates'),f.classList);
+               var coordinates = g.querySelectorAll('coordinates');
+              _renderParts(coordinates,f.classList);
             }
           }
           poly.style.display = ""; // fill it
@@ -2744,8 +2745,9 @@ M.TemplatedTileLayer = L.TileLayer.extend({
                 {
                   acceptNode: function(node) {
                     if (node.nodeType === Node.ELEMENT_NODE) return NodeFilter.FILTER_ACCEPT;
-                    if (node.nodeType === Node.TEXT_NODE && 
-                        node.textContent.match(/(\S+ \S+)/gim))return NodeFilter.FILTER_ACCEPT;
+                    var re = /(\S+ \S+)/gim;
+                    if (node.nodeType === Node.TEXT_NODE && re.test(node.data)) 
+                      return NodeFilter.FILTER_ACCEPT;
                     return NodeFilter.FILTER_REJECT;
                   }
                 })
