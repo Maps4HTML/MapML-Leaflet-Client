@@ -2628,6 +2628,8 @@ M.TemplatedTileLayer = L.TileLayer.extend({
   	 _draw: function (feature, tileCoords, tile) {
       var geometry = feature.tagName.toUpperCase() === 'FEATURE' ? feature.getElementsByTagName('geometry')[0] : feature,
           pt, coordinates, member, members, svg = !tile.getContext, crs = this.options.crs;
+      
+      // if (feature.id !== "fclass.71" || (tileCoords.z !== 2 && tileCoords.x !== 1 && tileCoords.y !== 1)) return;
         
       if (!svg) {
         var context = tile.getContext('2d');
@@ -2674,9 +2676,12 @@ M.TemplatedTileLayer = L.TileLayer.extend({
         case 'MULTIPOLYGON':
           members = geometry.getElementsByTagName('polygon');
           for (member=0;member<members.length;member++) {
+          // remove this logic once we get geometry-specific classes in dev stream
+          // the following is a hack specific to the countries layer in development
+            members[member].classList.add("_"+ feature.id.substring(feature.id.indexOf(".")+1));
             renderPolygon(
               this.coordsToPoints(coordinatesToArray(
-              members[member].getElementsByTagName('coordinates')), 1 ,tileCoords), feature
+              members[member].getElementsByTagName('coordinates')), 1 ,tileCoords), members[member]
             );
           }
           break;
@@ -2687,7 +2692,7 @@ M.TemplatedTileLayer = L.TileLayer.extend({
           console.log('Invalid geometry');
           break;
       }
-      function renderPolygon(p, f) {
+      function renderPolygon(p, g) {
         if (svg) {
           var poly = document.createElementNS('http://www.w3.org/2000/svg', 'path'),
               path = "";
@@ -2697,14 +2702,16 @@ M.TemplatedTileLayer = L.TileLayer.extend({
               path = path + Math.round(p[ring][pt].x) + "," + Math.round(p[ring][pt].y) + " ";
             }
           }
+//          for(var ring=0;ring<p.length;ring++) {
+//            path = path + "M " + p[ring][0].x + " " + p[ring][0].y + " ";
+//            for (var pt=1;pt<p[ring].length;pt++) {
+//              path = path + p[ring][pt].x + " " + p[ring][pt].y + " ";
+//            }
+//          }
           poly.setAttribute("d", path);
           
-          // remove this logic once we get geometry-specific classes in dev stream
-          // the following is a hack specific to the countries layer in development
-          f.classList.add("_"+ f.id.substring(f.id.indexOf(".")+1));
-
           // copy the classes from the feature to its proxy svg path
-          f.classList.forEach(val => poly.classList.add(val));
+          g.classList.forEach(val => poly.classList.add(val));
           poly.style.display = "none";
           tile.appendChild(poly);
           // if the outline of the polygon is to be drawn, need to see if it
@@ -2712,7 +2719,6 @@ M.TemplatedTileLayer = L.TileLayer.extend({
           // individual segments with appropriate classes (copied from the
           // input <span class="">nnn nnnn...nnnN nnnN</span> segments.
           if (window.getComputedStyle(poly).stroke !== "none") {
-            var g = f.getElementsByTagName('geometry')[0];
             if (g.querySelector('coordinates span')) {
               // recursively parse the coordinates element (c) for path segments
               // and create them as individual path elements with corresponding 
@@ -2721,7 +2727,7 @@ M.TemplatedTileLayer = L.TileLayer.extend({
               // stroke the polygon's outline as is...
                poly.style.stroke = "none";
                var coordinates = g.querySelectorAll('coordinates');
-              _renderParts(coordinates,f.classList);
+              _renderParts(coordinates,g.classList);
             }
           }
           poly.style.display = ""; // fill it
@@ -2801,13 +2807,18 @@ M.TemplatedTileLayer = L.TileLayer.extend({
                 coordinatesAsArrays[i].push(coordinatesAsArrays[i+1][0]);
               }
             }
-            
+//            var points = coordsToPointsDBG(coordinatesAsArrays[i], tileCoords);
+//            var line = document.createElementNS('http://www.w3.org/2000/svg', 'path'),
+//                path = "M ";
+//            for(var c=0;c<points.length;c++) {
+//              path +=  points[c].x + " " + points[c].y + " ";
+//            }            
             var points = coordsToPoints(coordinatesAsArrays[i], tileCoords);
             var line = document.createElementNS('http://www.w3.org/2000/svg', 'path'),
                 path = "M ";
             for(var c=0;c<points.length;c++) {
-              path +=  Math.round(points[c].x) + "," + Math.round(points[c].y) + " ";
-            }
+              path +=  points[c].x + " " + points[c].y + " ";
+            }            
             line.setAttribute("d", path);
             parentNode.classList.forEach(val => line.classList.add(val));
             line.classList.add('pen');
@@ -2940,6 +2951,16 @@ M.TemplatedTileLayer = L.TileLayer.extend({
                this.coordsToPoints(coords[i], levelsDeep - 1, tileCoords) :
                this.coordsToPoint(coords[i], tileCoords);
        points.push(point);
+      }
+      return points;
+    },
+    coordsToPointsDBG: function (coords, levelsDeep, tileCoords) {
+      var point, i, len, points = [];
+      for (i = 0, len = coords.length; i < len; i++) {
+        point = levelsDeep ?
+               this.coordsToPointsDBG(coords[i], levelsDeep - 1, tileCoords) :
+                      point = L.point(coords[i][0],coords[i][1]);
+        points.push(point);
       }
       return points;
     },
