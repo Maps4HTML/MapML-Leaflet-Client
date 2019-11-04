@@ -2817,7 +2817,7 @@ M.TemplatedTileLayer = L.TileLayer.extend({
             var line = document.createElementNS('http://www.w3.org/2000/svg', 'path'),
                 path = "M ";
             for(var c=0;c<points.length;c++) {
-              path +=  points[c].x + " " + points[c].y + " ";
+              path += Math.round(points[c].x) + "," + Math.round(points[c].y) + " ";
             }            
             line.setAttribute("d", path);
             parentNode.classList.forEach(val => line.classList.add(val));
