@@ -8,20 +8,32 @@
      <style>
 * {margin: 0;padding: 0;}
 map { height: 100vh;}
-svg.style-scope.web-map path.fclass { fill: lightcyan; stroke: cyan}
-svg.style-scope.web-map path.pen.noline { display: none}
-svg.style-scope.web-map path.pen { stroke: cyan}
+/*svg.style-scope.web-map path.fclass { fill: blue; stroke: red}
+svg.style-scope.web-map circle.fclass { fill: yellow; stroke: none}
+
 svg.style-scope.web-map path._5 { fill: green; }
 svg.style-scope.web-map path._24 { fill: blue; }
 svg.style-scope.web-map path._18 { fill: yellow; }
 svg.style-scope.web-map path._2 { fill: white; }
-/*svg.style-scope.web-map path.fclass { fill: yellow; }*/
+svg.style-scope.web-map path._2.span { fill: none; }
+svg.style-scope.web-map path.span.noline { display: none}
+ The rendering engine (script) should get the stroke properties from the 
+   rule that targets the polygon, in this case .fclass above. 
+svg.style-scope.web-map path.span { fill:none; stroke: red}
+svg.style-scope.web-map path.fclass { fill: yellow; }*/
+
 </style>
+<link rel="stylesheet" href="ecere_testing_countries.css">
    </head>
    <body>
-<map is="web-map" projection="WGS84" zoom="2" lat="35" lon="-90" controls="" width="1903" height="937" style="width: 1903px; height: 937px;">
+<map is="web-map" projection="WGS84" zoom="2" lat="0" lon="0" controls="" width="1903" height="937" style="width: 1903px; height: 937px;">
 
           <layer- label="Blue Marble NG" src="http://maps.ecere.com/geoapi/collections/BMNG%202004/?f=mapml" checked></layer->
+<!--          <layer- src="http://maps.ecere.com/geoapi/collections/NaturalEarth/physical/ne_10m_geography_regions_points?f=mapml" label="points" checked></layer->-->
+<!--          <layer- src="http://maps.ecere.com/geoapi/collections/NaturalEarth/physical/bathymetry/ne_10m_bathymetry_H_3000?f=mapml" label="foo" checked></layer->-->
+<!--          <layer- src="http://maps.ecere.com/geoapi/collections/NaturalEarth/physical/ne_10m_coastline?f=mapml" label="foo" checked></layer->-->
+<!--          <layer- src="http://maps.ecere.com/geoapi/collections/NaturalEarth/physical/ne_10m_rivers_europe?f=mapml" label="foo" checked></layer->-->
+<!--          <layer- src="http://maps.ecere.com/geoapi/collections/NaturalEarth/physical/ne_10m_playas?f=mapml" label="foo" checked></layer->-->
 <layer- label="Countries" checked>
 <extent units="WGS84">
          <input name="zoomLevel" type="zoom" min="0" max="6"/>
@@ -41,7 +53,40 @@ svg.style-scope.web-map path._2 { fill: white; }
 </layer->
           
 <!--          <layer- label="Ottawa roads" src="http://maps.ecere.com/geoapi/collections/osm/ottawa/roads?f=mapml" checked></layer->-->
-<layer- label="Lakes" src="http://maps.ecere.com/geoapi/collections/NaturalEarth/physical/ne_10m_lakes/?f=mapml" checked></layer->
+          <!-- 
+          http://maps.ecere.com/geoapi/collections/NaturalEarth/physical/ne_10m_graticules?f=mapml
+          http://maps.ecere.com/geoapi/collections/NaturalEarth/physical/ne_10m_minor_islands_coastline?f=mapml
+          http://maps.ecere.com/geoapi/collections/NaturalEarth/physical/ne_10m_geographic_lines?f=mapml
+          
+          http://maps.ecere.com/geoapi/collections/NaturalEarth/physical/bathymetry/ne_10m_bathymetry_H_3000?f=mapml
+          http://maps.ecere.com/geoapi/collections/NaturalEarth/physical/ne_10m_coastline?f=mapml
+          http://maps.ecere.com/geoapi/collections/NaturalEarth/physical/ne_10m_rivers_europe?f=mapml
+          http://maps.ecere.com/geoapi/collections/NaturalEarth/physical/ne_10m_playas?f=mapml
+          http://maps.ecere.com/geoapi/collections/NaturalEarth/physical/ne_10m_reefs?f=mapml
+          http://maps.ecere.com/geoapi/collections/NaturalEarth/physical/ne_10m_land_ocean_seams?f=mapml
+          http://maps.ecere.com/geoapi/collections/NaturalEarth/physical/ne_10m_rivers_lake_centerlines_scale_rank?f=mapml
+          http://maps.ecere.com/geoapi/collections/NaturalEarth/physical/ne_10m_minor_islands?f=mapml
+          http://maps.ecere.com/geoapi/collections/NaturalEarth/physical/ne_10m_lakes_europe?f=mapml
+          http://maps.ecere.com/geoapi/collections/NaturalEarth/physical/ne_10m_glaciated_areas?f=mapml
+          http://maps.ecere.com/geoapi/collections/NaturalEarth/physical/ne_10m_land?f=mapml
+          http://maps.ecere.com/geoapi/collections/NaturalEarth/physical/ne_10m_geography_regions_polys?f=mapml
+          http://maps.ecere.com/geoapi/collections/NaturalEarth/physical/ne_10m_land_ocean_label_points?f=mapml
+          http://maps.ecere.com/geoapi/collections/NaturalEarth/physical/ne_10m_geography_marine_polys?f=mapml
+          http://maps.ecere.com/geoapi/collections/NaturalEarth/physical/ne_10m_geography_regions_elevation_points?f=mapml
+          http://maps.ecere.com/geoapi/collections/NaturalEarth/physical/ne_10m_lakes?f=mapml
+          http://maps.ecere.com/geoapi/collections/NaturalEarth/physical/ne_10m_ocean?f=mapml
+          http://maps.ecere.com/geoapi/collections/NaturalEarth/physical/ne_10m_lakes_north_america?f=mapml
+          http://maps.ecere.com/geoapi/collections/NaturalEarth/physical/ne_10m_rivers_lake_centerlines?f=mapml
+          http://maps.ecere.com/geoapi/collections/NaturalEarth/physical/ne_10m_lakes_historic?f=mapml
+          http://maps.ecere.com/geoapi/collections/NaturalEarth/physical/ne_10m_wgs84_bounding_box?f=mapml
+          http://maps.ecere.com/geoapi/collections/NaturalEarth/physical/ne_10m_lakes_pluvial?f=mapml
+          http://maps.ecere.com/geoapi/collections/NaturalEarth/physical/ne_10m_rivers_north_america?f=mapml
+          http://maps.ecere.com/geoapi/collections/NaturalEarth/physical/ne_10m_minor_islands_label_points?f=mapml
+          http://maps.ecere.com/geoapi/collections/NaturalEarth/physical/ne_10m_ocean_scale_rank?f=mapml
+          http://maps.ecere.com/geoapi/collections/NaturalEarth/physical/ne_10m_antarctic_ice_shelves_lines?f=mapml
+          
+          -->
+<!--<layer- label="Lakes" src="http://maps.ecere.com/geoapi/collections/NaturalEarth/physical/ne_10m_lakes/?f=mapml" checked></layer->-->
         <!--   <layer- label="Rivers" src="http://maps.ecere.com/geoapi/collections/NaturalEarth/physical/ne_10m_rivers_lake_centerlines/?f=mapml" checked></layer->-->
 <!--          <layer- label="Ocean Labels" src="http://maps.ecere.com/geoapi/collections/NaturalEarth/physical/ne_10m_land_ocean_label_points/?f=mapml" checked></layer->
           <layer- label="Pacific groupings" src="http://maps.ecere.com/geoapi/collections/NaturalEarth/cultural/ne_10m_admin_0_pacific_groupings/?f=mapml" checked></layer->

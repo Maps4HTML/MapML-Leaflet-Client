@@ -2627,14 +2627,13 @@ M.TemplatedTileLayer = L.TileLayer.extend({
     },
   	 _draw: function (feature, tileCoords, tile) {
       var geometry = feature.tagName.toUpperCase() === 'FEATURE' ? feature.getElementsByTagName('geometry')[0] : feature,
-          pt, coordinates, member, members, svg = !tile.getContext, crs = this.options.crs;
+          pt, coordinates, member, members, crs = this.options.crs;
+  
+        feature.classList.add("_"+ feature.id.substring(feature.id.indexOf(".")+1));
+        feature.classList.forEach(val => geometry.classList.add(val));
       
       // if (feature.id !== "fclass.71" || (tileCoords.z !== 2 && tileCoords.x !== 1 && tileCoords.y !== 1)) return;
         
-      if (!svg) {
-        var context = tile.getContext('2d');
-      }
-
       // because we are creating SVG shapes as proxies for <feature> geometries,
       // we have to establish a convention for where the author can set up classes
       // that are to be copied onto the proxy elements.  Going with <coordinates>
@@ -2646,39 +2645,51 @@ M.TemplatedTileLayer = L.TileLayer.extend({
           coordinates = [];
           geometry.getElementsByTagName('coordinates')[0].textContent.split(/\s+/gim).forEach(parseNumber,coordinates);
           pt = this.coordsToPoint(coordinates, tileCoords);
-          renderPoint(pt, feature);
+          renderPoint(pt, geometry);
           break;
         case 'MULTIPOINT':
           coordinates = [];
+          // TODO the definition of multipoint geometry was modified in testbed 15
+          // to align with geojson a bit better.  
+          // this modification requires one <coordinates> element with 1 or more
+          // text string coordinate pairs, per the model for <coordinates> in a
+          // linestring (but with different semantics). As such, in order to separately
+          // select and style a coordinate, the user has to wrap it in a <span class="...>
+          // The code below does not  support that yet.  the renderPoint code
+          // will have to use treewalker (as the polygon code does), and copy the
+          // classes from the geometry element to each child svg element
+          // created i.e. onto the circle or path(s) that are created.
           geometry.getElementsByTagName('coordinates')[0].textContent.match(/(\S+ \S+)/gim).forEach(splitCoordinate, coordinates);
           members = this.coordsToPoints(coordinates, 0, tileCoords);
           for(member=0;member<members.length;member++) {
-            renderPoint(members[member], feature);
+            // propagate the classes from the feature to each geometry
+            feature.classList.forEach(val => geometry.getElementsByTagName('coordinates')[0].classList.add(val));
+            renderPoint(members[member], geometry.getElementsByTagName('coordinates')[0]);
           }
           break;
         case 'LINESTRING':
           coordinates = [];
           geometry.getElementsByTagName('coordinates')[0].textContent.match(/(\S+ \S+)/gim).forEach(splitCoordinate, coordinates);
-          renderLinestring(this.coordsToPoints(coordinates, 0, tileCoords), feature);
+          renderLinestring(this.coordsToPoints(coordinates, 0, tileCoords), geometry);
           break;
         case 'MULTILINESTRING':
           members = geometry.getElementsByTagName('coordinates');
           for (member=0;member<members.length;member++) {
             coordinates = [];
+          // propagate the classes from the feature to each geometry
+            feature.classList.forEach(val => members[member].classList.add(val));
             members[member].textContent.match(/(\S+ \S+)/gim).forEach(splitCoordinate, coordinates);
-            renderLinestring(this.coordsToPoints(coordinates, 0, tileCoords), feature);
+            renderLinestring(this.coordsToPoints(coordinates, 0, tileCoords), geometry);
           }
           break;
         case 'POLYGON':
-          var rings = geometry.getElementsByTagName('coordinates');
-          renderPolygon(this.coordsToPoints(coordinatesToArray(rings), 1, tileCoords), feature);
+          renderPolygon(this.coordsToPoints(coordinatesToArray(geometry.getElementsByTagName('coordinates')), 1, tileCoords), geometry);
           break;
         case 'MULTIPOLYGON':
           members = geometry.getElementsByTagName('polygon');
           for (member=0;member<members.length;member++) {
-          // remove this logic once we get geometry-specific classes in dev stream
-          // the following is a hack specific to the countries layer in development
-            members[member].classList.add("_"+ feature.id.substring(feature.id.indexOf(".")+1));
+            // propagate the classes from the feature to each geometry
+            feature.classList.forEach(val => members[member].classList.add(val));
             renderPolygon(
               this.coordsToPoints(coordinatesToArray(
               members[member].getElementsByTagName('coordinates')), 1 ,tileCoords), members[member]
@@ -2692,58 +2703,40 @@ M.TemplatedTileLayer = L.TileLayer.extend({
           console.log('Invalid geometry');
           break;
       }
-      function renderPolygon(p, g) {
-        if (svg) {
-          var poly = document.createElementNS('http://www.w3.org/2000/svg', 'path'),
-              path = "";
-          for(var ring=0;ring<p.length;ring++) {
-            path = path + "M " + Math.round(p[ring][0].x) + "," + Math.round(p[ring][0].y) + " ";
-            for (var pt=1;pt<p[ring].length;pt++) {
-              path = path + Math.round(p[ring][pt].x) + "," + Math.round(p[ring][pt].y) + " ";
-            }
+      function renderPolygon(p, f) {
+        var poly = document.createElementNS('http://www.w3.org/2000/svg', 'path'),
+            path = "";
+        for(var ring=0;ring<p.length;ring++) {
+          path = path + "M " + Math.round(p[ring][0].x) + "," + Math.round(p[ring][0].y) + " ";
+          for (var pt=1;pt<p[ring].length;pt++) {
+            path = path + Math.round(p[ring][pt].x) + "," + Math.round(p[ring][pt].y) + " ";
           }
-//          for(var ring=0;ring<p.length;ring++) {
-//            path = path + "M " + p[ring][0].x + " " + p[ring][0].y + " ";
-//            for (var pt=1;pt<p[ring].length;pt++) {
-//              path = path + p[ring][pt].x + " " + p[ring][pt].y + " ";
-//            }
-//          }
-          poly.setAttribute("d", path);
-          
-          // copy the classes from the feature to its proxy svg path
-          g.classList.forEach(val => poly.classList.add(val));
-          poly.style.display = "none";
-          tile.appendChild(poly);
-          // if the outline of the polygon is to be drawn, need to see if it
-          // is composed of differently styled segments, and if so, create
-          // individual segments with appropriate classes (copied from the
-          // input <span class="">nnn nnnn...nnnN nnnN</span> segments.
-          if (window.getComputedStyle(poly).stroke !== "none") {
-            if (g.querySelector('coordinates span')) {
-              // recursively parse the coordinates element (c) for path segments
-              // and create them as individual path elements with corresponding 
-              // class list values copied from the input <span> or parent 
-              // <coordinates>
-              // stroke the polygon's outline as is...
-               poly.style.stroke = "none";
-               var coordinates = g.querySelectorAll('coordinates');
-              _renderParts(coordinates,g.classList);
-            }
-          }
-          poly.style.display = ""; // fill it
-        } else {
-          context.beginPath();
-          for(var ring=0;ring<p.length;ring++) {
-            context.moveTo(p[ring][0].x, p[ring][0].y);
-            for (var pt=1;pt<p[ring].length;pt++) {
-              context.lineTo(p[ring][pt].x, p[ring][pt].y);
-            }
-            context.closePath();
-          }
-          context.fill();
         }
+        poly.setAttribute("d", path);
+
+        // copy the classes from the feature to its proxy svg path
+        f.classList.forEach(val => poly.classList.add(val));
+        poly.style.display = "none";
+        tile.appendChild(poly);
+        // if the outline of the polygon is to be drawn, need to see if it
+        // is composed of differently styled segments, and if so, create
+        // individual segments with appropriate classes (copied from the
+        // input <span class="">nnn nnnn...nnnN nnnN</span> segments.
+        if (window.getComputedStyle(poly).stroke !== "none") {
+          if (f.querySelector('coordinates span')) {
+            // recursively parse the coordinates element (c) for path segments
+            // and create them as individual path elements with corresponding 
+            // class list values copied from the input <span> or parent 
+            // <coordinates>
+            // stroke the polygon's outline as is...
+             poly.style.stroke = "none";
+             var coordinates = f.querySelectorAll('coordinates');
+            _renderOutline(coordinates,f.classList);
+          }
+        }
+        poly.style.display = ""; // fill it
       }
-      function _renderParts(c, classList) {
+      function _renderOutline(c, classList) {
         for (var i=0;i<c.length;i++) {
           _coordinatesToPaths(
               document.createTreeWalker(c[i],
@@ -2807,12 +2800,20 @@ M.TemplatedTileLayer = L.TileLayer.extend({
                 coordinatesAsArrays[i].push(coordinatesAsArrays[i+1][0]);
               }
             }
-//            var points = coordsToPointsDBG(coordinatesAsArrays[i], tileCoords);
-//            var line = document.createElementNS('http://www.w3.org/2000/svg', 'path'),
-//                path = "M ";
-//            for(var c=0;c<points.length;c++) {
-//              path +=  points[c].x + " " + points[c].y + " ";
-//            }            
+//            var rawpoints = coordsToPointsDBG(coordinatesAsArrays[i], tileCoords);
+//            var wgs84line = document.createElementNS('http://www.w3.org/2000/svg', 'path'),
+//                wgs84path = "M ";
+//            for(var c=0;c<rawpoints.length;c++) {
+//              wgs84path +=  rawpoints[c].x + " " + rawpoints[c].y + " ";
+//            }
+//            wgs84line.setAttribute("d", wgs84path);
+//            parentNode.classList.forEach(val => wgs84line.classList.add(val));
+//            wgs84line.classList.add('span');
+//            wgs84line.style.stroke = "none";
+//            wgs84line.style.fill = "none";
+//            tile.appendChild(wgs84line);
+            // should be preceding sibling of its drawn match:
+
             var points = coordsToPoints(coordinatesAsArrays[i], tileCoords);
             var line = document.createElementNS('http://www.w3.org/2000/svg', 'path'),
                 path = "M ";
@@ -2821,62 +2822,40 @@ M.TemplatedTileLayer = L.TileLayer.extend({
             }            
             line.setAttribute("d", path);
             parentNode.classList.forEach(val => line.classList.add(val));
-            line.classList.add('pen');
+            line.classList.add('span');
             tile.appendChild(line);
             i++;
           }
         }
       }
       function renderLinestring(l, f) {
-        if (svg) {
-          if (f.querySelector('coordinates span')) {
-            // recursively parse the coordinates element (c) for path segments
-            // and create them as individual path elements with corresponding 
-            // class list value
-          } else { // create a single path element, draw it
-            var line = document.createElementNS('http://www.w3.org/2000/svg', 'path'),
-                path = "";
-             path =  path + "M " + Math.round(l[0].x) + "," + Math.round(l[0].y) + " ";
-            for(var c=1;c<l.length;c++) {
-              path =  path + Math.round(l[c].x) + "," + Math.round(l[c].y) + " ";
-            }
-            line.setAttribute("d", path);
-            // remove this logic once we get geometry-specific classes in dev stream
-            // the following is a hack specific to the countries layer in development
-            f.classList.add("_"+ f.id.substring(f.id.indexOf(".")+1));
-            
-            f.classList.forEach(val => line.classList.add(val));
-            tile.appendChild(line);
-          }
-        } else {
-          // draw a path
-          context.beginPath();
-          context.moveTo(l[0].x, l[0].y);
+        if (f.querySelector('coordinates span')) {
+          // recursively parse the coordinates element (c) for path segments
+          // and create them as individual path elements with corresponding 
+          // class list value
+        } else { // create a single path element, draw it
+          var line = document.createElementNS('http://www.w3.org/2000/svg', 'path'),
+              path = "";
+           path =  path + "M " + Math.round(l[0].x) + "," + Math.round(l[0].y) + " ";
           for(var c=1;c<l.length;c++) {
-            context.lineTo(l[c].x, l[c].y);
+            path =  path + Math.round(l[c].x) + "," + Math.round(l[c].y) + " ";
           }
-          context.stroke();
-        }
-      }
-      function renderPoint(p, f) {
-        if (svg) {
-          var point = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-          point.setAttribute("cx", Math.round(p.x));
-          point.setAttribute("cy", Math.round(p.y));
-          point.setAttribute("r", "5");
+          line.setAttribute("d", path);
           // remove this logic once we get geometry-specific classes in dev stream
           // the following is a hack specific to the countries layer in development
           f.classList.add("_"+ f.id.substring(f.id.indexOf(".")+1));
 
-          f.forEach(val => point.classList.add(val));
-          point.style.display = "none";
-          tile.appendChild(point);
-        } else {
-          // draw a circle for now
-          context.beginPath();
-          context.arc(p.x, p.y, 2, 0, Math.PI * 2, false);
-          context.fill();
+          f.classList.forEach(val => line.classList.add(val));
+          tile.appendChild(line);
         }
+      }
+      function renderPoint(p, f) {
+        var point = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        point.setAttribute("cx", Math.round(p.x));
+        point.setAttribute("cy", Math.round(p.y));
+        point.setAttribute("r", "5");
+        f.classList.forEach(val => point.classList.add(val));
+        tile.appendChild(point);
       }
       function coordinatesToArray(coordinates) {
         var a = new Array(coordinates.length);
@@ -3220,6 +3199,13 @@ M.TemplatedTileLayer = L.TileLayer.extend({
              max: crs.resolutions.length,
              value: crs.resolutions.length 
            };
+           if (!isNaN(Number.parseInt(value,10)) && 
+                   Number.parseInt(value,10) >= zoom.min && 
+                   Number.parseInt(value,10) <= zoom.max) {
+             zoom.value = Number.parseInt(value,10);
+           } else {
+             zoom.value = zoom.max;
+           }
            if (!isNaN(Number.parseInt(min,10)) && 
                    Number.parseInt(min,10) >= zoom.min && 
                    Number.parseInt(min,10) <= zoom.max) {
@@ -3229,13 +3215,6 @@ M.TemplatedTileLayer = L.TileLayer.extend({
                    Number.parseInt(max,10) >= zoom.min && 
                    Number.parseInt(max,10) <= zoom.max) {
              zoom.max = Number.parseInt(max,10);
-           }
-           if (!isNaN(Number.parseInt(value,10)) && 
-                   Number.parseInt(value,10) >= zoom.min && 
-                   Number.parseInt(value,10) <= zoom.max) {
-             zoom.value = Number.parseInt(value,10);
-           } else {
-             zoom.value = zoom.max;
            }
            template.zoom = zoom;
         } else if (shard) {
