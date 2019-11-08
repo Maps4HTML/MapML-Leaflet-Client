@@ -736,6 +736,7 @@ M.QueryHandler = L.Handler.extend({
       }
     }
 });
+// see https://leafletjs.com/examples/extending/extending-3-controls.html#handlers
 L.Map.addInitHook('addHandler', 'query', M.QueryHandler);
 M.MapMLLayer = L.Layer.extend({
     // zIndex has to be set, for the case where the layer is added to the
@@ -2731,7 +2732,7 @@ M.TemplatedTileLayer = L.TileLayer.extend({
             // stroke the polygon's outline as is...
              poly.style.stroke = "none";
              var coordinates = f.querySelectorAll('coordinates');
-            _renderOutline(coordinates,f.classList);
+            _renderOutline(coordinates, f.classList);
           }
         }
         poly.style.display = ""; // fill it
@@ -2833,6 +2834,7 @@ M.TemplatedTileLayer = L.TileLayer.extend({
           // recursively parse the coordinates element (c) for path segments
           // and create them as individual path elements with corresponding 
           // class list value
+//        _renderOutline(f.querySelectorAll('coordinates'), f.classList);
         } else { // create a single path element, draw it
           var line = document.createElementNS('http://www.w3.org/2000/svg', 'path'),
               path = "";
@@ -2841,11 +2843,12 @@ M.TemplatedTileLayer = L.TileLayer.extend({
             path =  path + Math.round(l[c].x) + "," + Math.round(l[c].y) + " ";
           }
           line.setAttribute("d", path);
-          // remove this logic once we get geometry-specific classes in dev stream
-          // the following is a hack specific to the countries layer in development
-          f.classList.add("_"+ f.id.substring(f.id.indexOf(".")+1));
 
           f.classList.forEach(val => line.classList.add(val));
+          // because polygons and linestrings are rendered as paths, need to
+          // add a class to differentiate.  This is kind of a stop-gap measure
+          // until I figure out a model for how all this should work...
+          line.classList.add('linestring');
           tile.appendChild(line);
         }
       }
@@ -2943,20 +2946,6 @@ M.TemplatedTileLayer = L.TileLayer.extend({
       }
       return points;
     },
-    coordsToLatLngs: function (coords, levelsDeep, coordsToLatLng) { // (Array[, Number, Function]) -> Array
-      var latlng, i, len,
-          latlngs = [];
-
-      for (i = 0, len = coords.length; i < len; i++) {
-       latlng = levelsDeep ?
-               this.coordsToLatLngs(coords[i], levelsDeep - 1, coordsToLatLng) :
-               (coordsToLatLng || this.coordsToLatLng)(coords[i]);
-
-       latlngs.push(latlng);
-      }
-
-      return latlngs;
-    },
     _initContainer: function () {
       if (this._container) { return; }
 
@@ -2980,20 +2969,20 @@ M.TemplatedTileLayer = L.TileLayer.extend({
           }).then(function(response) {
             var contenttype = response.headers.get("Content-Type");
             if ( contenttype.startsWith("text/mapml")) {
-              return handleMapMLResponse(response, tile);
+              return handleMapMLResponse(response);
             } else {
-              return handleOtherResponse(response, tile);
+              return handleOtherResponse(response);
             }
           }).then(mapml => {
             this._drawTile(mapml, coords, tile);
           }).catch(function(err) {});
-      function handleMapMLResponse(response, tile) {
-          return response.text().then(mapml => {
+      function handleMapMLResponse(response) {
+          return response.text().then(text => {
               var parser = new DOMParser();
-                  return parser.parseFromString(mapml, "application/xml");
+                  return parser.parseFromString(text, "application/xml");
           });
       }
-      function handleOtherResponse(response, tile) {
+      function handleOtherResponse(response) {
           return response.text().then(text => {
               var c = document.createElement('iframe');
               c.csp = "script-src 'none'";
@@ -3651,8 +3640,12 @@ M.MapMLFeatures = L.FeatureGroup.extend({
       var layer = M.MapMLFeatures.geometryToLayer(mapml, options.pointToLayer, options.coordsToLatLng, options);
       if (layer) {
         layer.properties = mapml.getElementsByTagName('properties')[0];
-
-        layer.options.className = mapml.getAttribute('class') ? mapml.getAttribute('class') : null;
+        
+        // if the layer is being used as a query handler output, it will have
+        // a color option set.  Otherwise, copy classes from the feature
+        if (!layer.options.color && mapml.hasAttribute('class')) {
+          layer.options.className = mapml.getAttribute('class');
+        }
         layer.defaultOptions = layer.options;
         this.resetStyle(layer);
 

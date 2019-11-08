@@ -15,29 +15,24 @@ path.linestring{ fill: none !important;}
 <link rel="stylesheet" href="ecere_testing_countries.css">
    </head>
    <body>
-<map is="web-map" projection="WGS84" zoom="2" lat="0" lon="0" controls="" width="1903" height="937" style="width: 1903px; height: 937px;">
+<map is="web-map" projection="OSMTILE" zoom="0" lat="0" lon="0" controls="" width="1903" height="937" style="width: 1903px; height: 937px;">
 
-          <layer- label="Blue Marble NG" src="http://maps.ecere.com/geoapi/collections/BMNG%202004/?f=mapml" checked></layer->
+<!--          <layer- label="Blue Marble NG" src="http://maps.ecere.com/geoapi/collections/BMNG%202004/?f=mapml" checked></layer->-->
 
 <!--          <layer- src="http://maps.ecere.com/geoapi/collections/NaturalEarth/physical/bathymetry/ne_10m_bathymetry_H_3000?f=mapml" label="foo" checked></layer->-->
 <!--          <layer- src="http://maps.ecere.com/geoapi/collections/NaturalEarth/physical/ne_10m_coastline?f=mapml" label="foo" checked></layer->-->
 <!--          <layer- src="http://maps.ecere.com/geoapi/collections/NaturalEarth/physical/ne_10m_rivers_europe?f=mapml" label="foo" checked></layer->-->
 <!--          <layer- src="http://maps.ecere.com/geoapi/collections/NaturalEarth/physical/ne_10m_playas?f=mapml" label="foo" checked></layer->-->
 <layer- label="Countries" checked>
-<extent units="WGS84">
+<extent units="OSMTILE">
          <input name="zoomLevel" type="zoom" min="0" max="6"/>
-         <input name="lon" type="location" units="gcrs" axis="longitude" />
-         <input name="lat" type="location" units="gcrs" axis="latitude" />
-         <input rel="pixel" name="maxLon" type="location" units="gcrs" axis="longitude" position="bottom-right" min="-180" max="180"/>
-         <input rel="pixel" name="maxLat" type="location" units="gcrs" axis="latitude" position="top-left" min="-90" max="90.0002058236639"/>
 
          <input name="row" type="location" axis="row" units="tilematrix"/>
          <input name="col" type="location" axis="column" units="tilematrix"/>
 
-         Tiles
-         <link rel='tile' type='text/mapml' title='Tiles for ne_10m_admin_0_countries (as MapML)' tref='http://maps.ecere.com/geoapi/collections/NaturalEarth/cultural/ne_10m_admin_0_countries/tiles/CRS84Quad2L0Tiles/{zoomLevel}/{row}/{col}.mapml'/>
+         <link rel='tile' type='text/mapml' tref='http://maps.ecere.com/geoapi/collections/NaturalEarth/cultural/ne_10m_admin_0_countries/tiles/GoogleMapsCompatible/{zoomLevel}/{row}/{col}.mapml'/>
 
-         <link rel='query' type='text/mapml' title='ne_10m_admin_0_countries (as MapML)' tref='http://maps.ecere.com/geoapi/collections/NaturalEarth/cultural/ne_10m_admin_0_countries/items.mapml?tilingScheme=CRS84Quad2L0Tiles&amp;zoomLevel={zoomLevel}&amp;bbox={lon},{lat},{lon},{lat}'/>
+<!--         <link rel='query' type='text/mapml' title='ne_10m_admin_0_countries (as MapML)' tref='http://maps.ecere.com/geoapi/collections/NaturalEarth/cultural/ne_10m_admin_0_countries/items.mapml?tilingScheme=GoogleMapsCompatible&amp;zoomLevel={zoomLevel}&amp;bbox={lon},{lat},{lon},{lat}'/>-->
       </extent>
 </layer->
 <!--          <layer- src="http://maps.ecere.com/geoapi/collections/NaturalEarth/physical/ne_10m_geography_regions_points?f=mapml" label="points" checked></layer->          -->
