@@ -3794,25 +3794,6 @@ L.extend(M.MapMLFeatures, {
     }
 
     return latlngs;
-  },
-
-  latLngToCoords: function (latlng) {
-    var coords = [latlng.lng, latlng.lat];
-
-    if (latlng.alt !== undefined) {
-     coords.push(latlng.alt);
-    }
-    return coords;
-  },
-
-  latLngsToCoords: function (latLngs) {
-    var coords = [];
-
-    for (var i = 0, len = latLngs.length; i < len; i++) {
-      coords.push(L.MapML.latLngToCoords(latLngs[i]));
-    }
-
-    return coords;
   }
 });
 M.mapMlFeatures = function (mapml, options) {
