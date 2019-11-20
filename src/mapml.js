@@ -3898,6 +3898,13 @@ M.MapMLLayerControl = L.Control.Layers.extend({
                 } else {
                     obj.input.disabled = false;
                     obj.input.style = null;
+                    // this is a bug fix for the situation where the author
+                    // includes a <layer- src="..." label="..."></layer->
+                    // without a 'checked' attribute, meaning the layer should
+                    // be in the layer control (if that's enabled) but not on
+                    // the map (visible doesn't imply it's on the map / checked,
+                    // just that it should be checkable if desired).
+                    obj.input.checked = obj.layer._layerEl.checked;
                     // ie does not work with null 
                     obj.input.nextElementSibling.style.fontStyle = '';
                 }
