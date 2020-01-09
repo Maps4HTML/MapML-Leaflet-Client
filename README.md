@@ -1,6 +1,4 @@
 # MapML-Leaflet-Plugin
 MapML JavaScript client for Leaflet.js
 
-The MapML client library depends on MapML-Leaflet, and adds the concept of a MapML layer, which is referred to by a simple URL.
-
-[Demo](http://geogratis.gc.ca/api/beta/mapml/en/cbmtile/cbmt/)
+Further development on this library will take place in the [Web-Map-Custom-Element](https://github.com/Maps4HTML/Web-Map-Custom-Element)
